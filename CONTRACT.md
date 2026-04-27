@@ -1,6 +1,6 @@
 # ts-proxy Operational Contract
 
-This document defines the strict external interfaces, CLI usage conventions, execution environments, and Makefile targets for the `ts-proxy` project. **It serves as the definitive reference for any system, script, or AI agent interacting with this tool.**
+This document defines the strict external interfaces, CLI usage conventions, execution environments, and comprehensive feature capabilities for the `ts-proxy` project. **It serves as the definitive reference for any system, script, or AI agent interacting with this tool.**
 
 Any deviation from this contract during implementation or future modifications requires explicit KπX approval and MUST be reflected here first.
 
@@ -30,30 +30,105 @@ docker run --rm \
 
 ---
 
-## 2. CLI Surface Contract
+## 2. Exhaustive CLI Surface Contract
 
-The CLI (`src/ts_proxy/cli.py`) is powered by `Typer` and MUST expose two primary namespaces: `admin` and `do`.
+The CLI (`src/ts_proxy/cli.py`) is powered by `Typer`. It exposes two primary namespaces: `admin` and `do`.
+All `do` commands MUST accept a `--format json` flag and default to JSON output to guarantee reliable parsing by AI agents.
 
 ### The `admin` Namespace (Diagnostics)
 Commands for operator health checks. These MUST NEVER mutate network state.
-- `ts-proxy admin status`: Verifies API connectivity using the active credentials. Outputs JSON status.
-- `ts-proxy admin auth-check`: Validates that the current token scopes match required permissions (`devices:read`, `network:write`, etc.).
+- `ts-proxy admin status`: Verifies API connectivity using the active credentials.
+- `ts-proxy admin auth-check`: Validates that the current token scopes match required permissions.
 
 ### The `do` Namespace (RPC Data/Action)
-All `do` commands MUST accept a `--format json` flag and default to JSON output to guarantee reliable parsing by AI agents.
+This namespace maps exactly to the Tailscale API v2 capabilities. **Every mutating operation MUST invoke the HITL (Human-In-The-Loop) validation.**
 
-**Read Operations (Instant)**
-- `ts-proxy do list-devices [--format json]`
-  - Returns: `[{"id": "...", "hostname": "...", "os": "...", "ips": [...]}, ...]`
-- `ts-proxy do get-acl [--format json]`
-  - Returns: The raw, current `huJSON` Tailnet Policy.
+#### 2.1 Devices (Machines)
+*Tailscale API: `/api/v2/tailnet/{tailnet}/devices` and `/api/v2/device/{id}`*
 
-**Write/Mutate Operations (HITL Validated)**
-- `ts-proxy do update-acl --file <path_to_hujson>`
-  - Inputs: Path to the proposed `huJSON` file.
-  - Returns: Transaction ID and status (`approved` or `rejected`).
-- `ts-proxy do delete-device --device-id <id>`
-  - Returns: Transaction ID and deletion confirmation.
+- **`list-devices`** [READ]
+  - *Args*: None
+  - *Output*: JSON array of device objects (id, hostname, os, ips, tags, lastSeen).
+  - *Example*: `ts-proxy do list-devices`
+
+- **`get-device`** [READ]
+  - *Args*: `--device-id <id>`
+  - *Output*: Detailed JSON object for a single device, including subnet routing states.
+  - *Example*: `ts-proxy do get-device --device-id node_a1b2c3`
+
+- **`delete-device`** [MUTATE]
+  - *Args*: `--device-id <id>`
+  - *Output*: `{ "tx_id": "...", "status": "approved", "deleted": true }`
+  - *Example*: `ts-proxy do delete-device --device-id node_a1b2c3`
+
+- **`update-device`** [MUTATE]
+  - *Args*: `--device-id <id> [--name <new_hostname>] [--tags <tag:one,tag:two>]`
+  - *Output*: Transaction status and updated device object.
+  - *Example*: `ts-proxy do update-device --device-id node_a1b2c3 --tags tag:server`
+
+- **`authorize-device`** [MUTATE]
+  - *Args*: `--device-id <id>`
+  - *Description*: Approves a device that is pending authorization.
+  - *Example*: `ts-proxy do authorize-device --device-id node_a1b2c3`
+
+- **`set-subnet-routes`** [MUTATE]
+  - *Args*: `--device-id <id> --routes <10.0.0.0/24,192.168.1.0/24>`
+  - *Description*: Approves specific advertised subnet routes for a device.
+  - *Example*: `ts-proxy do set-subnet-routes --device-id node_a1b2c3 --routes 192.168.1.0/24`
+
+#### 2.2 Access Control (ACLs)
+*Tailscale API: `/api/v2/tailnet/{tailnet}/acl`*
+
+- **`get-acl`** [READ]
+  - *Args*: None
+  - *Output*: The raw `huJSON` Tailnet Policy File (including ACLs, Grants, SSH rules).
+  - *Example*: `ts-proxy do get-acl`
+
+- **`update-acl`** [MUTATE]
+  - *Args*: `--file <path_to_hujson>`
+  - *Description*: Validates and replaces the entire Tailnet policy.
+  - *Output*: Transaction status.
+  - *Example*: `ts-proxy do update-acl --file ./proposed_policy.hujson`
+
+#### 2.3 DNS Configuration
+*Tailscale API: `/api/v2/tailnet/{tailnet}/dns/...`*
+
+- **`get-dns-preferences`** [READ]
+  - *Args*: None
+  - *Output*: JSON containing MagicDNS state (`magicDNS: true/false`).
+- **`update-dns-preferences`** [MUTATE]
+  - *Args*: `--magic-dns <true|false>`
+- **`get-dns-nameservers`** [READ]
+  - *Args*: None
+  - *Output*: JSON array of global DNS nameservers (e.g., `["1.1.1.1", "8.8.8.8"]`).
+- **`update-dns-nameservers`** [MUTATE]
+  - *Args*: `--nameservers <1.1.1.1,8.8.8.8>`
+- **`get-search-paths`** [READ]
+  - *Args*: None
+  - *Output*: JSON array of split DNS search paths.
+- **`update-search-paths`** [MUTATE]
+  - *Args*: `--paths <corp.local,intranet.local>`
+
+#### 2.4 Authentication Keys
+*Tailscale API: `/api/v2/tailnet/{tailnet}/keys`*
+
+- **`list-authkeys`** [READ]
+  - *Args*: None
+  - *Output*: JSON array of active auth keys (metadata only, secrets are never retrievable).
+- **`create-authkey`** [MUTATE]
+  - *Args*: `[--tags <tag:prod>] [--reusable] [--ephemeral] [--expiry-days <N>]`
+  - *Output*: `{ "tx_id": "...", "key": "tskey-auth-...", "id": "..." }` (This is the ONLY time the key secret is visible).
+- **`delete-authkey`** [MUTATE]
+  - *Args*: `--key-id <id>`
+
+#### 2.5 Webhooks
+*Tailscale API: `/api/v2/tailnet/{tailnet}/webhooks`*
+
+- **`list-webhooks`** [READ]
+- **`create-webhook`** [MUTATE]
+  - *Args*: `--endpoint <https://url> --subscriptions <nodeCreated,nodeDeleted>`
+- **`delete-webhook`** [MUTATE]
+  - *Args*: `--webhook-id <id>`
 
 ---
 
