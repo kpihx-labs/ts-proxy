@@ -42,7 +42,7 @@ def _resolve_data_dir() -> Path:
     env_dir = os.environ.get("TS_PROXY_DATA")
     if env_dir:
         return Path(os.path.expanduser(env_dir))
-    return Path(os.path.expanduser("~/.ts-proxy"))
+    return Path(os.path.expanduser("~/.ts_proxy"))
 
 
 DEFAULT_DATA_DIR = _resolve_data_dir()

@@ -14,8 +14,8 @@ echo -e "${CYAN}⌫ Uninstalling ts-proxy...${NC}"
 # --- Paths ---
 BIN_DIR="${HOME}/.local/bin"
 SHIM_DEST="${BIN_DIR}/ts-proxy"
-DATA_DIR="${HOME}/.ts-proxy"
-TMP_DIR="/tmp/ts-proxy"
+DATA_DIR="${HOME}/.ts_proxy"
+TMP_DIR="/tmp/ts_proxy"
 
 # --- Removal ---
 if [ -L "${SHIM_DEST}" ]; then
@@ -38,7 +38,7 @@ echo -e "🧹 Purging data and temporary files..."
 rm -rf "${TMP_DIR}"
 echo -e "✅ Purged temporary directory: ${TMP_DIR}"
 
-# Mandatory purge for 100% cleanliness as requested
+# Mandatory purge for 100% cleanliness
 if [ -d "${DATA_DIR}" ]; then
     rm -rf "${DATA_DIR}"
     echo -e "✅ Purged data directory and secrets: ${DATA_DIR}"

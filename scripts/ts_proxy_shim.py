@@ -9,8 +9,8 @@ from pathlib import Path
 
 # --- Configuration ---
 DEFAULT_IMAGE = "kpihx/ts-proxy:latest"
-DEFAULT_DATA_DIR = "/root/.ts-proxy" # Inside container
-HOST_DATA_DIR = Path.home() / ".ts-proxy"
+DEFAULT_DATA_DIR = "/root/.ts_proxy" # Inside container
+HOST_DATA_DIR = Path.home() / ".ts_proxy"
 
 def _pick_host_port() -> int:
     with socket.socket(socket.socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -32,19 +32,21 @@ def _build_docker_command(args: list[str], port: int) -> list[str]:
     if sys.stdin.isatty():
         cmd.append("-t")
 
-    # Mount secrets if they exist
+    # Mount secrets if they exist (Sovereign Prod Mount)
     secret_path = Path("/var/run/secrets/ts-auth.json")
     if secret_path.exists():
         cmd.extend(["-v", f"{secret_path}:/var/run/secrets/ts-auth.json:ro"])
     elif (workspace / "secrets" / "ts-auth.json").exists():
         cmd.extend(["-v", f"{workspace}/secrets/ts-auth.json:/var/run/secrets/ts-auth.json:ro"])
 
-    # Mount data dir for persistence
+    # Mount data dir for persistence (secrets.json, config.yaml, logs)
     HOST_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    cmd.extend(["-v", f"{HOST_DATA_DIR}:/root/.ts-proxy"])
+    cmd.extend(["-v", f"{HOST_DATA_DIR}:/root/.ts_proxy"])
 
-    # Mount /tmp for autosaves
-    cmd.extend(["-v", "/tmp:/tmp"])
+    # Mount /tmp/ts_proxy for autosaves
+    host_tmp = Path("/tmp/ts_proxy")
+    host_tmp.mkdir(parents=True, exist_ok=True)
+    cmd.extend(["-v", f"{host_tmp}:/tmp/ts_proxy"])
 
     cmd.append(DEFAULT_IMAGE)
     cmd.extend(args)

@@ -37,7 +37,7 @@ fi
 
 # --- Paths ---
 BIN_DIR="${HOME}/.local/bin"
-DATA_DIR="${HOME}/.ts-proxy"
+DATA_DIR="${HOME}/.ts_proxy"
 SHIM_DEST="${BIN_DIR}/ts-proxy"
 
 # --- Setup ---
@@ -51,6 +51,7 @@ if [ -f "Dockerfile" ]; then
     docker build -t "${DOCKER_IMAGE}" .
 else
     echo -e "🚀 Release mode detected. Pulling appliance image..."
+    # Note: If this is a private registry, 'docker login' must be performed beforehand.
     docker pull "${DOCKER_IMAGE}"
 fi
 
@@ -68,7 +69,7 @@ fi
 # --- Finalize ---
 echo -e "\n${GREEN}✅ ts-proxy installed successfully!${NC}"
 echo -e "🚀 You can now use '${CYAN}ts-proxy do --help${NC}' to explore."
-echo -e "📂 Config and secrets live in: ${YELLOW}${DATA_DIR}${NC}"
+echo -e "📂 Config, logs and secrets live in: ${YELLOW}${DATA_DIR}${NC}"
 
 # Check if BIN_DIR is in PATH
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then

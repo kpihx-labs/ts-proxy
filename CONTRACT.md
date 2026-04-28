@@ -95,9 +95,9 @@ Transparency on where data lives and how it persists across different execution 
 |-----------|--------------------------|-----------------------|-------------|
 | **Binary** | `/usr/local/bin/ts-proxy` (Shim) | `~/.local/bin/ts-proxy` (Link) | The entrypoint command. |
 | **Logic** | `KpihX/ts-proxy:latest` (Image) | `src/ts_proxy/` (Source) | Where the Python code resides. |
-| **Config** | `~/.ts-proxy/config.yaml` | `~/.ts-proxy/config.yaml` | User preferences and HITL ports. |
-| **Secrets** | `/var/run/secrets/ts-auth.json` | `~/.ts-proxy/secrets.json` | OAuth credentials for the API. |
-| **Autosave** | `/tmp/ts-proxy/` (Host Mount) | `/tmp/ts-proxy/` | JSON mirrors of all command outputs. |
+| **Config** | `~/.ts_proxy/config.yaml` | `~/.ts_proxy/config.yaml` | User preferences and HITL ports. |
+| **Secrets** | `/var/run/secrets/ts-auth.json` | `~/.ts_proxy/secrets.json` | OAuth credentials for the API. |
+| **Autosave** | `/tmp/ts_proxy/` (Host Mount) | `/tmp/ts_proxy/` | JSON mirrors of all command outputs. |
 
 ### 1.4 The Help Engine (Two-Tier Documentation)
 `ts-proxy` utilizes a dynamic introspection engine to provide two levels of assistance:
