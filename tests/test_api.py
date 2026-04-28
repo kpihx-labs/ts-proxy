@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from ts_proxy.api import AuthManager, TailscaleClient, SecureProxyError
+from ts_proxy.models import DeviceIDPayload
 
 
 @pytest.fixture
@@ -56,6 +57,7 @@ async def test_list_devices(mock_auth):
         assert args[1] == "https://api.tailscale.com/api/v2/tailnet/test.com/devices"
 
 
+
 @pytest.mark.asyncio
 async def test_delete_device(mock_auth):
     client = TailscaleClient(mock_auth)
@@ -64,7 +66,8 @@ async def test_delete_device(mock_auth):
     with patch("httpx.AsyncClient.request") as mock_req:
         mock_req.return_value = MagicMock(status_code=200)
 
-        success = await client.delete_device("device_id")
+        payload = DeviceIDPayload(device_id="device_id")
+        success = await client.delete_device(payload)
         assert success is True
         mock_req.assert_called_once_with(
             "DELETE",

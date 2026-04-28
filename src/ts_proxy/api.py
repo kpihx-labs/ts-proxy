@@ -1,7 +1,31 @@
+"""
+Tailscale Proxy API Client.
+
+RULES FOR CONTRIBUTORS:
+1. ALPHABETICAL ORDER: All methods in TailscaleClient and commands in cli.py MUST be kept in strict ascending alphabetical order.
+2. DOCSTRING STRUCTURE: Every method MUST have exactly three sections in its docstring:
+    - Description (Summary + Body)
+    - Parameters: (List of fields or "- None")
+    - Examples: (Usage examples)
+3. ZERO TOLERANCE: Any deviation from these rules will break the dynamic documentation engine.
+"""
+
 import json
 import os
 import httpx
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
+
+from .models import (
+    ACLUpdatePayload,
+    AuthKeyPayload,
+    DeviceIDPayload,
+    DeviceUpdatePayload,
+    DNSPreferencesPayload,
+    NameserversPayload,
+    SearchPathsPayload,
+    SubnetRoutesPayload,
+    WebhookPayload,
+)
 
 
 class SecureProxyError(Exception):
@@ -49,7 +73,7 @@ class AuthManager:
             self._load_from_json(PROD_SECRET_MOUNT)
             return
 
-        # 5. Fallback (Quietly, as login might be the next step)
+        # 5. Fallback
         pass
 
     def _load_from_json(self, path: str):
@@ -118,7 +142,6 @@ class TailscaleClient:
             )
 
             if resp.status_code >= 400:
-                # Be careful not to leak secrets in the error message
                 err_msg = (
                     f"API Request failed: {method} {endpoint} -> {resp.status_code}"
                 )
@@ -131,50 +154,84 @@ class TailscaleClient:
                 raise SecureProxyError(err_msg)
             return resp
 
-    # --- 2.1 Devices ---
-    async def list_devices(self) -> List[Dict]:
-        """
-        List all devices in the tailnet.
+    # --- Tailscale Operations (STRICT ALPHABETICAL ORDER) ---
 
-        Retrieves a comprehensive list of all devices (nodes) currently registered
-        in your tailnet, including their IP addresses, hostnames, and status.
+    async def authorize_device(self, payload: DeviceIDPayload) -> bool:
+        """
+        Authorize a pending device.
+
+        Approves a device that is waiting for manual authorization to join the tailnet.
+        Requires Human-in-the-Loop approval.
 
         Parameters:
-            - None: This method uses the tailnet associated with the current authentication.
+            - device_id (str): The unique identifier (ID) of the device to authorize.
 
         Examples:
-            - Basic List:
-                `ts-proxy do list-devices`
-            - Filtered output (via jq):
-                `ts-proxy do list-devices | jq '.[0].hostname'`
-            - Table view:
-                `ts-proxy do list-devices --format table`
+            - Authorize node:
+                `ts-proxy do authorize-device '{"device_id": "12345"}'`
         """
-        resp = await self._request("GET", f"/tailnet/{self.auth.tailnet}/devices")
-        return resp.json().get("devices", [])
+        await self._request(
+            "POST", f"/device/{payload.device_id}/authorized", json_data={"authorized": True}
+        )
+        return True
 
-    async def get_device(self, device_id: str) -> Dict:
+    async def create_authkey(self, payload: AuthKeyPayload) -> Dict:
         """
-        Retrieve details for a specific device.
+        Create a new authentication key.
 
-        Fetches full metadata for a single device, including its capabilities,
-        last seen timestamp, and assigned tags.
+        Generates a new auth key for adding devices to the tailnet without manual login.
 
         Parameters:
-            - device_id (str): The unique identifier (ID) of the device.
+            - capabilities (Dict): Key capabilities.
+            - expirySeconds (int): Key expiry time in seconds.
 
         Examples:
-            - Get by ID:
-                `ts-proxy do get-device '{"device_id": "12345"}'`
-            - Using a payload file:
-                `ts-proxy do get-device ./device_query.json`
-            - JSON output for inspection:
-                `ts-proxy do get-device '{"device_id": "12345"}' --format json`
+            - Create reusable key:
+                `ts-proxy do create-authkey '{"capabilities": {"devices": {"create": {"reusable": true, "preauthorized": true}}}}'`
         """
-        resp = await self._request("GET", f"/device/{device_id}")
+        resp = await self._request(
+            "POST",
+            f"/tailnet/{self.auth.tailnet}/keys",
+            json_data=payload.model_dump(exclude_none=True),
+        )
         return resp.json()
 
-    async def delete_device(self, device_id: str) -> bool:
+    async def create_webhook(self, payload: WebhookPayload) -> Dict:
+        """
+        Create a new webhook.
+
+        Sets up a new webhook endpoint to receive real-time notifications about tailnet events.
+
+        Parameters:
+            - endpointUrl (str): The destination URL.
+            - subscriptions (List[str]): Event types (e.g., ["nodeCreated"]).
+
+        Examples:
+            - Create webhook:
+                `ts-proxy do create-webhook '{"endpointUrl": "https://n8n.labs/webhook", "subscriptions": ["nodeCreated"]}'`
+        """
+        resp = await self._request(
+            "POST", f"/tailnet/{self.auth.tailnet}/webhooks", json_data=payload.model_dump()
+        )
+        return resp.json()
+
+    async def delete_authkey(self, payload: DeviceIDPayload) -> bool:
+        """
+        Delete an authentication key.
+
+        Invalidates an existing authentication key immediately.
+
+        Parameters:
+            - device_id (str): The ID of the key to delete.
+
+        Examples:
+            - Delete key:
+                `ts-proxy do delete-authkey '{"device_id": "k12345"}'`
+        """
+        await self._request("DELETE", f"/tailnet/{self.auth.tailnet}/keys/{payload.device_id}")
+        return True
+
+    async def delete_device(self, payload: DeviceIDPayload) -> bool:
         """
         Delete a device from the tailnet.
 
@@ -192,74 +249,35 @@ class TailscaleClient:
             - Quiet deletion (still requires HITL):
                 `ts-proxy do delete-device '{"device_id": "12345"}' > /dev/null`
         """
-        await self._request("DELETE", f"/device/{device_id}")
+        await self._request("DELETE", f"/device/{payload.device_id}")
         return True
 
-    async def update_device(self, device_id: str, payload: Dict) -> bool:
+    async def delete_webhook(self, payload: DeviceIDPayload) -> bool:
         """
-        Update device configuration.
+        Delete a webhook.
 
-        Modifies the settings of an existing device, such as its assigned tags.
+        Removes a webhook configuration from your tailnet.
 
         Parameters:
-            - device_id (str): The unique identifier (ID) of the device.
-            - payload (Dict): Dictionary containing update fields (e.g., {"tags": ["tag:server"]}).
+            - device_id (str): The ID of the webhook to delete.
 
         Examples:
-            - Update Tags:
-                `ts-proxy do update-device '{"device_id": "123", "tags": ["tag:prod"]}'`
-            - Clear Tags:
-                `ts-proxy do update-device '{"device_id": "123", "tags": []}'`
-            - Full update:
-                `ts-proxy do update-device ./update.json`
+            - Delete webhook:
+                `ts-proxy do delete-webhook '{"device_id": "wh123"}'`
         """
         await self._request(
-            "POST", f"/device/{device_id}/attributes", json_data=payload
+            "DELETE", f"/tailnet/{self.auth.tailnet}/webhooks/{payload.device_id}"
         )
         return True
 
-    async def authorize_device(self, device_id: str) -> bool:
-        """
-        Authorize a pending device.
-
-        Approves a device that is waiting for manual authorization.
-        Requires Human-in-the-Loop approval.
-
-        Parameters:
-            - device_id (str): The unique identifier (ID) of the device.
-
-        Examples:
-            - Authorize node:
-                `ts-proxy do authorize-device '{"device_id": "12345"}'`
-        """
-        payload = {"authorized": True}
-        await self._request(
-            "POST", f"/device/{device_id}/authorized", json_data=payload
-        )
-        return True
-
-    async def set_subnet_routes(self, device_id: str, routes: List[str]) -> bool:
-        """
-        Configure subnet routes for a device.
-
-        Parameters:
-            - device_id (str): The unique identifier (ID) of the device.
-            - routes (List[str]): List of CIDR strings (e.g., ["10.0.0.0/24"]).
-
-        Examples:
-            - Enable route:
-                `ts-proxy do set-subnet-routes '{"device_id": "123", "routes": ["192.168.1.0/24"]}'`
-        """
-        payload = {"routes": routes}
-        await self._request("POST", f"/device/{device_id}/routes", json_data=payload)
-        return True
-
-    # --- 2.2 Access Control ---
     async def get_acl(self) -> str:
         """
         Retrieve the current Access Control List (ACL).
 
         Fetches the HuJSON representation of your tailnet's security policy.
+
+        Parameters:
+            - None
 
         Examples:
             - Fetch and view:
@@ -270,35 +288,43 @@ class TailscaleClient:
         resp = await self._request("GET", f"/tailnet/{self.auth.tailnet}/acl")
         return resp.text
 
-    async def update_acl(self, hujson_payload: str) -> bool:
+    async def get_device(self, payload: DeviceIDPayload) -> Dict:
         """
-        Update the tailnet Access Control List (ACL).
+        Retrieve details for a specific device.
 
-        Uploads a new security policy in HuJSON format. This action is critical
-        and requires Human-in-the-Loop approval.
+        Fetches full metadata for a single device, including its capabilities,
+        last seen timestamp, and assigned tags.
 
         Parameters:
-            - hujson_payload (str): The raw HuJSON text content.
+            - device_id (str): The unique identifier (ID) of the device.
 
         Examples:
-            - Update from file:
-                `ts-proxy do update-acl '{"file": "./policy.hujson"}'`
+            - Get by ID:
+                `ts-proxy do get-device '{"device_id": "12345"}'`
+            - Using a payload file:
+                `ts-proxy do get-device ./device_query.json`
         """
-        # Note: update_acl expects the raw text data or multipart depending on the API.
-        # Typically it's raw text POST.
-        # Ensure we send it properly.
-        headers = {
-            "Authorization": f"Bearer {await self.auth.get_access_token()}",
-            "Content-Type": "application/hujson",
-        }
-        async with httpx.AsyncClient() as client:
-            url = f"{self.BASE_URL}/tailnet/{self.auth.tailnet}/acl"
-            resp = await client.post(url, headers=headers, content=hujson_payload)
-            if resp.status_code >= 400:
-                raise SecureProxyError(f"Failed to update ACL: {resp.text}")
-        return True
+        resp = await self._request("GET", f"/device/{payload.device_id}")
+        return resp.json()
 
-    # --- 2.3 DNS ---
+    async def get_dns_nameservers(self) -> List[str]:
+        """
+        Retrieve global DNS nameservers.
+
+        Returns the list of DNS nameservers configured for the tailnet.
+
+        Parameters:
+            - None
+
+        Examples:
+            - List nameservers:
+                `ts-proxy do get-dns-nameservers`
+        """
+        resp = await self._request(
+            "GET", f"/tailnet/{self.auth.tailnet}/dns/nameservers"
+        )
+        return resp.json().get("dns", [])
+
     async def get_dns_preferences(self) -> Dict:
         """
         Retrieve DNS preferences for the tailnet.
@@ -313,72 +339,20 @@ class TailscaleClient:
                 `ts-proxy do get-dns-preferences`
             - Check MagicDNS specifically:
                 `ts-proxy do get-dns-preferences | jq '.magicDNS'`
-            - Table view:
-                `ts-proxy do get-dns-preferences --format table`
         """
         resp = await self._request(
             "GET", f"/tailnet/{self.auth.tailnet}/dns/preferences"
         )
         return resp.json()
 
-    async def update_dns_preferences(self, payload: Dict) -> bool:
-        """
-        Update DNS preferences.
-
-        Changes global DNS behavior for your tailnet.
-
-        Parameters:
-            - payload (Dict): Dictionary with DNS settings (e.g. {"magicDNS": true}).
-
-        Examples:
-            - Enable MagicDNS:
-                `ts-proxy do update-dns-preferences '{"magicDNS": true}'`
-            - Disable MagicDNS:
-                `ts-proxy do update-dns-preferences '{"magicDNS": false}'`
-            - Full update:
-                `ts-proxy do update-dns-preferences ./dns_config.json`
-        """
-        await self._request(
-            "POST", f"/tailnet/{self.auth.tailnet}/dns/preferences", json_data=payload
-        )
-        return True
-
-    async def get_dns_nameservers(self) -> List[str]:
-        """
-        Retrieve global DNS nameservers.
-
-        Parameters:
-            - None
-
-        Examples:
-            - List nameservers:
-                `ts-proxy do get-dns-nameservers`
-        """
-        resp = await self._request(
-            "GET", f"/tailnet/{self.auth.tailnet}/dns/nameservers"
-        )
-        return resp.json().get("dns", [])
-
-    async def update_dns_nameservers(self, nameservers: List[str]) -> bool:
-        """
-        Update global DNS nameservers.
-
-        Parameters:
-            - nameservers (List[str]): List of nameserver IPs.
-
-        Examples:
-            - Set Google DNS:
-                `ts-proxy do update-dns-nameservers '{"nameservers": ["8.8.8.8", "8.8.4.4"]}'`
-        """
-        payload = {"dns": nameservers}
-        await self._request(
-            "POST", f"/tailnet/{self.auth.tailnet}/dns/nameservers", json_data=payload
-        )
-        return True
-
     async def get_search_paths(self) -> List[str]:
         """
         Retrieve DNS search paths.
+
+        Returns the search domains configured for the tailnet.
+
+        Parameters:
+            - None
 
         Examples:
             - List paths:
@@ -389,24 +363,14 @@ class TailscaleClient:
         )
         return resp.json().get("searchPaths", [])
 
-    async def update_search_paths(self, paths: List[str]) -> bool:
-        """
-        Update DNS search paths.
-
-        Examples:
-            - Set search paths:
-                `ts-proxy do update-search-paths '{"search_paths": ["internal.lan"]}'`
-        """
-        payload = {"searchPaths": paths}
-        await self._request(
-            "POST", f"/tailnet/{self.auth.tailnet}/dns/searchpaths", json_data=payload
-        )
-        return True
-
-    # --- 2.4 Keys ---
     async def list_authkeys(self) -> List[Dict]:
         """
         List all active auth keys.
+
+        Returns a list of all currently valid authentication keys.
+
+        Parameters:
+            - None
 
         Examples:
             - List keys:
@@ -415,37 +379,33 @@ class TailscaleClient:
         resp = await self._request("GET", f"/tailnet/{self.auth.tailnet}/keys")
         return resp.json().get("keys", [])
 
-    async def create_authkey(self, payload: Dict) -> Dict:
+    async def list_devices(self) -> List[Dict]:
         """
-        Create a new authentication key.
+        List all devices in the tailnet.
+
+        Retrieves a comprehensive list of all devices (nodes) currently registered
+        in your tailnet, including their IP addresses, hostnames, and status.
 
         Parameters:
-            - payload (Dict): Key capabilities and settings.
+            - None
 
         Examples:
-            - Create reusable key:
-                `ts-proxy do create-authkey '{"capabilities": {"devices": {"create": {"reusable": true, "preauthorized": true}}}}'`
+            - Basic List:
+                `ts-proxy do list-devices`
+            - Table view:
+                `ts-proxy do list-devices --format table`
         """
-        resp = await self._request(
-            "POST", f"/tailnet/{self.auth.tailnet}/keys", json_data=payload
-        )
-        return resp.json()
+        resp = await self._request("GET", f"/tailnet/{self.auth.tailnet}/devices")
+        return resp.json().get("devices", [])
 
-    async def delete_authkey(self, key_id: str) -> bool:
-        """
-        Delete an authentication key.
-
-        Examples:
-            - Delete key:
-                `ts-proxy do delete-authkey '{"key_id": "k12345"}'`
-        """
-        await self._request("DELETE", f"/tailnet/{self.auth.tailnet}/keys/{key_id}")
-        return True
-
-    # --- 2.5 Webhooks ---
     async def list_webhooks(self) -> List[Dict]:
         """
         List all configured webhooks.
+
+        Returns a list of all webhooks registered in the tailnet.
+
+        Parameters:
+            - None
 
         Examples:
             - List webhooks:
@@ -454,28 +414,128 @@ class TailscaleClient:
         resp = await self._request("GET", f"/tailnet/{self.auth.tailnet}/webhooks")
         return resp.json().get("webhooks", [])
 
-    async def create_webhook(self, payload: Dict) -> Dict:
+    async def set_subnet_routes(self, payload: SubnetRoutesPayload) -> bool:
         """
-        Create a new webhook.
+        Configure subnet routes for a device.
+
+        Enables or disables specific CIDR ranges that this device is allowed to
+        route for the tailnet.
+
+        Parameters:
+            - device_id (str): The unique identifier (ID) of the device.
+            - routes (List[str]): List of CIDR strings (e.g., ["10.0.0.0/24"]).
 
         Examples:
-            - Create webhook:
-                `ts-proxy do create-webhook '{"endpointUrl": "https://n8n.labs/webhook", "subscriptions": ["nodeCreated"]}'`
-        """
-        resp = await self._request(
-            "POST", f"/tailnet/{self.auth.tailnet}/webhooks", json_data=payload
-        )
-        return resp.json()
-
-    async def delete_webhook(self, webhook_id: str) -> bool:
-        """
-        Delete a webhook.
-
-        Examples:
-            - Delete webhook:
-                `ts-proxy do delete-webhook '{"webhook_id": "wh123"}'`
+            - Enable route:
+                `ts-proxy do set-subnet-routes '{"device_id": "123", "routes": ["192.168.1.0/24"]}'`
         """
         await self._request(
-            "DELETE", f"/tailnet/{self.auth.tailnet}/webhooks/{webhook_id}"
+            "POST", f"/device/{payload.device_id}/routes", json_data={"routes": payload.routes}
+        )
+        return True
+
+    async def update_acl(self, payload: ACLUpdatePayload) -> bool:
+        """
+        Update the tailnet Access Control List (ACL).
+
+        Uploads a new security policy in HuJSON format. This action is critical
+        and requires Human-in-the-Loop approval.
+
+        Parameters:
+            - hujson_payload (str): The raw HuJSON text content of the policy.
+
+        Examples:
+            - Update from file:
+                `ts-proxy do update-acl ./policy.hujson`
+        """
+        headers = {
+            "Authorization": f"Bearer {await self.auth.get_access_token()}",
+            "Content-Type": "application/hujson",
+        }
+        async with httpx.AsyncClient() as client:
+            url = f"{self.BASE_URL}/tailnet/{self.auth.tailnet}/acl"
+            resp = await client.post(url, headers=headers, content=payload.hujson_payload)
+            if resp.status_code >= 400:
+                raise SecureProxyError(f"Failed to update ACL: {resp.text}")
+        return True
+
+    async def update_device(self, payload: DeviceUpdatePayload) -> bool:
+        """
+        Update device configuration.
+
+        Modifies the settings of an existing device, such as its assigned tags.
+
+        Parameters:
+            - device_id (str): The unique identifier (ID) of the device.
+            - tags (List[str]): List of tags to assign.
+
+        Examples:
+            - Update Tags:
+                `ts-proxy do update-device '{"device_id": "123", "tags": ["tag:prod"]}'`
+        """
+        await self._request(
+            "POST",
+            f"/device/{payload.device_id}/attributes",
+            json_data={"tags": payload.tags},
+        )
+        return True
+
+    async def update_dns_nameservers(self, payload: NameserversPayload) -> bool:
+        """
+        Update global DNS nameservers.
+
+        Configures the DNS nameservers used by all nodes in the tailnet.
+
+        Parameters:
+            - nameservers (List[str]): List of nameserver IPs.
+
+        Examples:
+            - Set Google DNS:
+                `ts-proxy do update-dns-nameservers '{"nameservers": ["8.8.8.8", "8.8.4.4"]}'`
+        """
+        await self._request(
+            "POST",
+            f"/tailnet/{self.auth.tailnet}/dns/nameservers",
+            json_data={"dns": payload.nameservers},
+        )
+        return True
+
+    async def update_dns_preferences(self, payload: DNSPreferencesPayload) -> bool:
+        """
+        Update DNS preferences.
+
+        Changes global DNS behavior for your tailnet, such as MagicDNS.
+
+        Parameters:
+            - magicDNS (bool): Whether to enable MagicDNS.
+
+        Examples:
+            - Enable MagicDNS:
+                `ts-proxy do update-dns-preferences '{"magicDNS": true}'`
+        """
+        await self._request(
+            "POST",
+            f"/tailnet/{self.auth.tailnet}/dns/preferences",
+            json_data=payload.model_dump(),
+        )
+        return True
+
+    async def update_search_paths(self, payload: SearchPathsPayload) -> bool:
+        """
+        Update DNS search paths.
+
+        Configures the list of search domains for nodes in the tailnet.
+
+        Parameters:
+            - paths (List[str]): List of DNS search paths.
+
+        Examples:
+            - Set search paths:
+                `ts-proxy do update-search-paths '{"paths": ["internal.lan"]}'`
+        """
+        await self._request(
+            "POST",
+            f"/tailnet/{self.auth.tailnet}/dns/searchpaths",
+            json_data={"searchPaths": payload.paths},
         )
         return True

@@ -1,3 +1,11 @@
+"""
+Tailscale Proxy CLI.
+
+RULES FOR CONTRIBUTORS:
+1. ALPHABETICAL ORDER: All commands in the 'do' namespace and items in _COMMAND_TO_API MUST be kept in strict ascending alphabetical order.
+2. CONSISTENCY: Every command must route to its corresponding TailscaleClient method.
+"""
+
 import json
 import asyncio
 import sys
@@ -10,8 +18,25 @@ from pathlib import Path
 from typing import Optional, Any, Callable, Dict
 from rich.console import Console
 from rich.table import Table
+from pydantic import ValidationError
 
-from .api import PERSISTED_SECRETS_PATH, AuthManager, TailscaleClient, SecureProxyError
+from .api import (
+    PERSISTED_SECRETS_PATH,
+    AuthManager,
+    TailscaleClient,
+    SecureProxyError,
+)
+from .models import (
+    ACLUpdatePayload,
+    AuthKeyPayload,
+    DeviceIDPayload,
+    DeviceUpdatePayload,
+    DNSPreferencesPayload,
+    NameserversPayload,
+    SearchPathsPayload,
+    SubnetRoutesPayload,
+    WebhookPayload,
+)
 from .hitl import prompt_review, prompt_config_edit
 from .config import (
     get_config_value,
@@ -19,7 +44,7 @@ from .config import (
     dump_config_text,
     write_config_text,
 )
-from .doc import get_function_schema, format_rich_help
+from .doc import format_rich_help
 
 console = Console()
 
@@ -116,15 +141,13 @@ def parse_payload(payload_str: Optional[str]) -> dict:
         if payload_str.strip().startswith(("{", "[")):
             raise SecureProxyError(f"Invalid JSON payload: {payload_str}")
 
-        # Fallback: treat as a single string ID if it's just one word (backwards compat for common cases)
-        # but the request says business params are in JSON.
         raise SecureProxyError(
             f"Payload must be valid JSON or a path to a JSON file. Got: {payload_str}"
         )
 
 
 # --- Versioning ---
-VERSION = "0.1.0"
+VERSION = "1.1.0"
 
 
 def version_callback(value: bool):
@@ -216,7 +239,10 @@ def require_hitl(action_name: str, payload: dict):
 
 
 def handle_error(e: Exception):
-    output_result({"status": "error", "message": str(e)})
+    if isinstance(e, ValidationError):
+        output_result({"status": "error", "message": "Validation failed", "errors": e.errors()})
+    else:
+        output_result({"status": "error", "message": str(e)})
     sys.exit(1)
 
 
@@ -302,8 +328,6 @@ def admin_status():
 @app_admin.command("auth-check")
 def admin_auth_check():
     """Validates token scopes."""
-    # Since Tailscale OAuth tokens don't have a direct 'whoami' introspection endpoint,
-    # we just fetch the token and confirm it's generated.
     client = get_client()
     try:
         run_async(client.auth.get_access_token())
@@ -322,7 +346,7 @@ def admin_auth_check():
 
 @app_config.command("get")
 def config_get(path: str):
-    """Retrieve a specific configuration value (hitl_port, hitl_timeout_seconds, hitl_host, log_level, tailnet_default)."""
+    """Retrieve a specific configuration value."""
     if path not in CONFIG_WHITELIST:
         handle_error(
             SecureProxyError(
@@ -386,10 +410,193 @@ def config_edit():
         handle_error(e)
 
 
-# --- Do Namespace: 2.1 Devices ---
+# --- Do Namespace (STRICT ALPHABETICAL ORDER) ---
 
 
-# --- Do Namespace: JSON-RPC Style ---
+@app_do.command("authorize-device")
+@autosave_output
+def authorize_device(
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Authorize a pending device."""
+    params = parse_payload(payload)
+    validated = DeviceIDPayload(**params)
+    require_hitl("authorize-device", params)
+    client = get_client()
+    run_async(client.authorize_device(validated))
+    return {"status": "approved", "authorized": True}
+
+
+@app_do.command("create-authkey")
+@autosave_output
+def create_authkey(
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Create a new authentication key."""
+    params = parse_payload(payload)
+    validated = AuthKeyPayload(**params)
+    require_hitl("create-authkey", params)
+    client = get_client()
+    res = run_async(client.create_authkey(validated))
+    return res
+
+
+@app_do.command("create-webhook")
+@autosave_output
+def create_webhook(
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Create a new webhook."""
+    params = parse_payload(payload)
+    validated = WebhookPayload(**params)
+    require_hitl("create-webhook", params)
+    client = get_client()
+    res = run_async(client.create_webhook(validated))
+    return res
+
+
+@app_do.command("delete-authkey")
+@autosave_output
+def delete_authkey(
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Delete an authentication key."""
+    params = parse_payload(payload)
+    validated = DeviceIDPayload(**params)
+    require_hitl("delete-authkey", params)
+    client = get_client()
+    run_async(client.delete_authkey(validated))
+    return {"status": "approved", "deleted": True}
+
+
+@app_do.command("delete-device")
+@autosave_output
+def delete_device(
+    payload: str = typer.Argument(
+        ..., help="JSON payload or path to JSON file."
+    ),
+    output_file: Optional[Path] = typer.Option(
+        None, "--output-file", "-o", help="Save output to file."
+    ),
+    output_format: str = typer.Option(
+        "json", "--format", "-f", help="Output format (json, table)."
+    ),
+):
+    """Delete a device from the tailnet."""
+    params = parse_payload(payload)
+    validated = DeviceIDPayload(**params)
+    require_hitl("delete-device", params)
+    client = get_client()
+    run_async(client.delete_device(validated))
+    return {"status": "approved", "deleted": True, "device_id": validated.device_id}
+
+
+@app_do.command("delete-webhook")
+@autosave_output
+def delete_webhook(
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Delete a webhook."""
+    params = parse_payload(payload)
+    validated = DeviceIDPayload(**params)
+    require_hitl("delete-webhook", params)
+    client = get_client()
+    run_async(client.delete_webhook(validated))
+    return {"status": "approved", "deleted": True}
+
+
+@app_do.command("get-acl")
+@autosave_output
+def get_acl(
+    payload: Optional[str] = typer.Argument(None),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Retrieve the current Access Control List (ACL)."""
+    client = get_client()
+    res = run_async(client.get_acl())
+    return {"acl_hujson": res}
+
+
+@app_do.command("get-device")
+@autosave_output
+def get_device(
+    payload: str = typer.Argument(
+        ..., help="JSON payload or path to JSON file."
+    ),
+    output_file: Optional[Path] = typer.Option(
+        None, "--output-file", "-o", help="Save output to file."
+    ),
+    output_format: str = typer.Option(
+        "json", "--format", "-f", help="Output format (json, table)."
+    ),
+):
+    """Retrieve details for a specific device."""
+    params = parse_payload(payload)
+    validated = DeviceIDPayload(**params)
+    client = get_client()
+    return run_async(client.get_device(validated))
+
+
+@app_do.command("get-dns-nameservers")
+@autosave_output
+def get_dns_nameservers(
+    payload: Optional[str] = typer.Argument(None),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Retrieve global DNS nameservers."""
+    client = get_client()
+    res = run_async(client.get_dns_nameservers())
+    return {"nameservers": res}
+
+
+@app_do.command("get-dns-preferences")
+@autosave_output
+def get_dns_preferences(
+    payload: Optional[str] = typer.Argument(None),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Retrieve DNS preferences for the tailnet."""
+    client = get_client()
+    return run_async(client.get_dns_preferences())
+
+
+@app_do.command("get-search-paths")
+@autosave_output
+def get_search_paths(
+    payload: Optional[str] = typer.Argument(None),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Retrieve DNS search paths."""
+    client = get_client()
+    res = run_async(client.get_search_paths())
+    return {"searchPaths": res}
+
+
+@app_do.command("list-authkeys")
+@autosave_output
+def list_authkeys(
+    payload: Optional[str] = typer.Argument(None),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """List all active auth keys."""
+    client = get_client()
+    res = run_async(client.list_authkeys())
+    return {"keys": res}
 
 
 @app_do.command("list-devices")
@@ -405,329 +612,9 @@ def list_devices(
         "json", "--format", "-f", help="Output format (json, table)."
     ),
 ):
-    """List devices in the tailnet."""
-    # Validate payload for future filtering, but unused for now
-    _ = parse_payload(payload)
+    """List all devices in the tailnet."""
     client = get_client()
     return run_async(client.list_devices())
-
-
-@app_do.command("get-device")
-@autosave_output
-def get_device(
-    payload: str = typer.Argument(
-        ..., help="JSON payload with 'device_id' or path to JSON file."
-    ),
-    output_file: Optional[Path] = typer.Option(
-        None, "--output-file", "-o", help="Save output to file."
-    ),
-    output_format: str = typer.Option(
-        "json", "--format", "-f", help="Output format (json, table)."
-    ),
-):
-    """Retrieve details for a specific device."""
-    params = parse_payload(payload)
-    device_id = params.get("device_id")
-    if not device_id:
-        raise SecureProxyError("Missing 'device_id' in JSON payload.")
-
-    client = get_client()
-    return run_async(client.get_device(device_id))
-
-
-@app_do.command("delete-device")
-@autosave_output
-def delete_device(
-    payload: str = typer.Argument(
-        ..., help="JSON payload with 'device_id' or path to JSON file."
-    ),
-    output_file: Optional[Path] = typer.Option(
-        None, "--output-file", "-o", help="Save output to file."
-    ),
-    output_format: str = typer.Option(
-        "json", "--format", "-f", help="Output format (json, table)."
-    ),
-):
-    """Delete a device from the tailnet."""
-    params = parse_payload(payload)
-    device_id = params.get("device_id")
-    if not device_id:
-        raise SecureProxyError("Missing 'device_id' in JSON payload.")
-
-    require_hitl("delete-device", params)
-    client = get_client()
-    run_async(client.delete_device(device_id))
-    return {"status": "approved", "deleted": True, "device_id": device_id}
-
-
-@app_do.command("update-device")
-@autosave_output
-def update_device(
-    payload: str = typer.Argument(
-        ..., help="JSON with 'device_id' and optional 'tags' (list)."
-    ),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Update device tags."""
-    params = parse_payload(payload)
-    device_id = params.get("device_id")
-    if not device_id:
-        raise SecureProxyError("Missing 'device_id' in JSON payload.")
-
-    # We only support tags update for now as per Tailscale API v2
-    update_data = {}
-    if "tags" in params:
-        update_data["tags"] = params["tags"]
-
-    require_hitl("update-device", params)
-    client = get_client()
-    run_async(client.update_device(device_id, update_data))
-    return {"status": "approved", "updated": True, "device_id": device_id}
-
-
-@app_do.command("authorize-device")
-@autosave_output
-def authorize_device(
-    payload: str = typer.Argument(..., help="JSON with 'device_id'."),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Authorize a device."""
-    params = parse_payload(payload)
-    device_id = params.get("device_id")
-    if not device_id:
-        raise SecureProxyError("Missing 'device_id' in JSON payload.")
-
-    require_hitl("authorize-device", {"device_id": device_id, "authorized": True})
-    client = get_client()
-    run_async(client.authorize_device(device_id))
-    return {"status": "approved", "authorized": True}
-
-
-@app_do.command("set-subnet-routes")
-@autosave_output
-def set_subnet_routes(
-    payload: str = typer.Argument(
-        ..., help="JSON with 'device_id' and 'routes' (list)."
-    ),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Set subnet routes for a device."""
-    params = parse_payload(payload)
-    device_id = params.get("device_id")
-    routes = params.get("routes")
-    if not device_id or routes is None:
-        raise SecureProxyError("Missing 'device_id' or 'routes' in JSON payload.")
-
-    require_hitl("set-subnet-routes", params)
-    client = get_client()
-    run_async(client.set_subnet_routes(device_id, routes))
-    return {"status": "approved", "routes_set": True}
-
-
-# --- Do Namespace: 2.2 ACLs ---
-
-
-@app_do.command("get-acl")
-@autosave_output
-def get_acl(
-    payload: Optional[str] = typer.Argument(None),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Retrieve the tailnet ACL (HuJSON)."""
-    # Validate payload
-    _ = parse_payload(payload)
-    client = get_client()
-    res = run_async(client.get_acl())
-    return {"acl_hujson": res}
-
-
-@app_do.command("update-acl")
-@autosave_output
-def update_acl(
-    payload: str = typer.Argument(
-        ..., help="JSON with 'content' (HuJSON) or 'file' (path)."
-    ),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Update the tailnet ACL."""
-    params = parse_payload(payload)
-    hujson = params.get("content")
-    if not hujson and "file" in params:
-        path = Path(params["file"])
-        if path.exists():
-            hujson = path.read_text()
-
-    if not hujson:
-        raise SecureProxyError("Missing ACL 'content' or 'file' in JSON payload.")
-
-    require_hitl("update-acl", {"preview": hujson[:200] + "..."})
-    client = get_client()
-    run_async(client.update_acl(hujson))
-    return {"status": "approved", "acl_updated": True}
-
-
-# --- Do Namespace: 2.3 DNS ---
-
-
-@app_do.command("get-dns-preferences")
-@autosave_output
-def get_dns_preferences(
-    payload: Optional[str] = typer.Argument(None),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Get DNS preferences."""
-    # Validate payload
-    _ = parse_payload(payload)
-    client = get_client()
-    return run_async(client.get_dns_preferences())
-
-
-@app_do.command("update-dns-preferences")
-@autosave_output
-def update_dns_preferences(
-    payload: str = typer.Argument(
-        ..., help="JSON with DNS settings (e.g. {'magicDNS': true})."
-    ),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Update DNS preferences."""
-    params = parse_payload(payload)
-    require_hitl("update-dns-preferences", params)
-    client = get_client()
-    run_async(client.update_dns_preferences(params))
-    return {"status": "approved", "preferences_updated": True}
-
-
-@app_do.command("get-dns-nameservers")
-@autosave_output
-def get_dns_nameservers(
-    payload: Optional[str] = typer.Argument(None),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Get DNS nameservers."""
-    # Validate payload
-    _ = parse_payload(payload)
-    client = get_client()
-    res = run_async(client.get_dns_nameservers())
-    return {"nameservers": res}
-
-
-@app_do.command("update-dns-nameservers")
-@autosave_output
-def update_dns_nameservers(
-    payload: str = typer.Argument(..., help="JSON with 'nameservers' (list)."),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Update DNS nameservers."""
-    params = parse_payload(payload)
-    ns_list = params.get("nameservers")
-    if ns_list is None:
-        raise SecureProxyError("Missing 'nameservers' list in JSON payload.")
-
-    require_hitl("update-dns-nameservers", params)
-    client = get_client()
-    run_async(client.update_dns_nameservers(ns_list))
-    return {"status": "approved", "nameservers_updated": True}
-
-
-@app_do.command("get-search-paths")
-@autosave_output
-def get_search_paths(
-    payload: Optional[str] = typer.Argument(None),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Get DNS search paths."""
-    # Validate payload
-    _ = parse_payload(payload)
-    client = get_client()
-    res = run_async(client.get_search_paths())
-    return {"searchPaths": res}
-
-
-@app_do.command("update-search-paths")
-@autosave_output
-def update_search_paths(
-    payload: str = typer.Argument(..., help="JSON with 'search_paths' (list)."),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Update DNS search paths."""
-    params = parse_payload(payload)
-    path_list = params.get("search_paths")
-    if path_list is None:
-        raise SecureProxyError("Missing 'search_paths' list in JSON payload.")
-
-    require_hitl("update-search-paths", params)
-    client = get_client()
-    run_async(client.update_search_paths(path_list))
-    return {"status": "approved", "search_paths_updated": True}
-
-
-# --- Do Namespace: 2.4 Keys ---
-
-
-@app_do.command("list-authkeys")
-@autosave_output
-def list_authkeys(
-    payload: Optional[str] = typer.Argument(None),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """List auth keys."""
-    # Validate payload
-    _ = parse_payload(payload)
-    client = get_client()
-    res = run_async(client.list_authkeys())
-    return {"keys": res}
-
-
-@app_do.command("create-authkey")
-@autosave_output
-def create_authkey(
-    payload: str = typer.Argument(
-        ..., help="JSON with key capabilities (e.g. {'reusable': true})."
-    ),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Create a new auth key."""
-    params = parse_payload(payload)
-    require_hitl("create-authkey", params)
-    client = get_client()
-    res = run_async(client.create_authkey(params))
-    return res
-
-
-@app_do.command("delete-authkey")
-@autosave_output
-def delete_authkey(
-    payload: str = typer.Argument(..., help="JSON with 'key_id'."),
-    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
-    output_format: str = typer.Option("json", "--format", "-f"),
-):
-    """Delete an auth key."""
-    params = parse_payload(payload)
-    key_id = params.get("key_id")
-    if not key_id:
-        raise SecureProxyError("Missing 'key_id' in JSON payload.")
-
-    require_hitl("delete-authkey", params)
-    client = get_client()
-    run_async(client.delete_authkey(key_id))
-    return {"status": "approved", "deleted": True}
-
-
-# --- Do Namespace: 2.5 Webhooks ---
 
 
 @app_do.command("list-webhooks")
@@ -737,73 +624,131 @@ def list_webhooks(
     output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
     output_format: str = typer.Option("json", "--format", "-f"),
 ):
-    """List webhooks."""
-    # Validate payload
-    _ = parse_payload(payload)
+    """List all configured webhooks."""
     client = get_client()
     res = run_async(client.list_webhooks())
     return {"webhooks": res}
 
 
-@app_do.command("create-webhook")
+@app_do.command("set-subnet-routes")
 @autosave_output
-def create_webhook(
-    payload: str = typer.Argument(
-        ..., help="JSON with 'endpointUrl' and 'subscriptions' (list)."
-    ),
+def set_subnet_routes(
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
     output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
     output_format: str = typer.Option("json", "--format", "-f"),
 ):
-    """Create a new webhook."""
+    """Configure subnet routes for a device."""
     params = parse_payload(payload)
-    require_hitl("create-webhook", params)
+    validated = SubnetRoutesPayload(**params)
+    require_hitl("set-subnet-routes", params)
     client = get_client()
-    res = run_async(client.create_webhook(params))
-    return res
+    run_async(client.set_subnet_routes(validated))
+    return {"status": "approved", "routes_set": True}
 
 
-@app_do.command("delete-webhook")
+@app_do.command("update-acl")
 @autosave_output
-def delete_webhook(
-    payload: str = typer.Argument(..., help="JSON with 'webhook_id'."),
+def update_acl(
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
     output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
     output_format: str = typer.Option("json", "--format", "-f"),
 ):
-    """Delete a webhook."""
+    """Update the tailnet Access Control List (ACL)."""
     params = parse_payload(payload)
-    webhook_id = params.get("webhook_id")
-    if not webhook_id:
-        raise SecureProxyError("Missing 'webhook_id' in JSON payload.")
-
-    require_hitl("delete-webhook", params)
+    validated = ACLUpdatePayload(**params)
+    require_hitl("update-acl", {"preview": validated.hujson_payload[:200] + "..."})
     client = get_client()
-    run_async(client.delete_webhook(webhook_id))
-    return {"status": "approved", "deleted": True}
+    run_async(client.update_acl(validated))
+    return {"status": "approved", "acl_updated": True}
 
 
-# --- Documentation Injection ---
+@app_do.command("update-device")
+@autosave_output
+def update_device(
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Update device configuration."""
+    params = parse_payload(payload)
+    validated = DeviceUpdatePayload(**params)
+    require_hitl("update-device", params)
+    client = get_client()
+    run_async(client.update_device(validated))
+    return {"status": "approved", "updated": True, "device_id": validated.device_id}
+
+
+@app_do.command("update-dns-nameservers")
+@autosave_output
+def update_dns_nameservers(
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Update global DNS nameservers."""
+    params = parse_payload(payload)
+    validated = NameserversPayload(**params)
+    require_hitl("update-dns-nameservers", params)
+    client = get_client()
+    run_async(client.update_dns_nameservers(validated))
+    return {"status": "approved", "nameservers_updated": True}
+
+
+@app_do.command("update-dns-preferences")
+@autosave_output
+def update_dns_preferences(
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Update DNS preferences."""
+    params = parse_payload(payload)
+    validated = DNSPreferencesPayload(**params)
+    require_hitl("update-dns-preferences", params)
+    client = get_client()
+    run_async(client.update_dns_preferences(validated))
+    return {"status": "approved", "preferences_updated": True}
+
+
+@app_do.command("update-search-paths")
+@autosave_output
+def update_search_paths(
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
+    output_file: Optional[Path] = typer.Option(None, "--output-file", "-o"),
+    output_format: str = typer.Option("json", "--format", "-f"),
+):
+    """Update DNS search paths."""
+    params = parse_payload(payload)
+    validated = SearchPathsPayload(**params)
+    require_hitl("update-search-paths", params)
+    client = get_client()
+    run_async(client.update_search_paths(validated))
+    return {"status": "approved", "search_paths_updated": True}
+
+
+# --- Documentation Injection (STRICT ALPHABETICAL ORDER) ---
 
 _COMMAND_TO_API: Dict[str, Callable] = {
-    "list-devices": TailscaleClient.list_devices,
-    "get-device": TailscaleClient.get_device,
-    "delete-device": TailscaleClient.delete_device,
-    "update-device": TailscaleClient.update_device,
     "authorize-device": TailscaleClient.authorize_device,
-    "set-subnet-routes": TailscaleClient.set_subnet_routes,
-    "get-acl": TailscaleClient.get_acl,
-    "update-acl": TailscaleClient.update_acl,
-    "get-dns-preferences": TailscaleClient.get_dns_preferences,
-    "update-dns-preferences": TailscaleClient.update_dns_preferences,
-    "get-dns-nameservers": TailscaleClient.get_dns_nameservers,
-    "update-dns-nameservers": TailscaleClient.update_dns_nameservers,
-    "get-search-paths": TailscaleClient.get_search_paths,
-    "update-search-paths": TailscaleClient.update_search_paths,
-    "list-authkeys": TailscaleClient.list_authkeys,
     "create-authkey": TailscaleClient.create_authkey,
-    "delete-authkey": TailscaleClient.delete_authkey,
-    "list-webhooks": TailscaleClient.list_webhooks,
     "create-webhook": TailscaleClient.create_webhook,
+    "delete-authkey": TailscaleClient.delete_authkey,
+    "delete-device": TailscaleClient.delete_device,
     "delete-webhook": TailscaleClient.delete_webhook,
+    "get-acl": TailscaleClient.get_acl,
+    "get-device": TailscaleClient.get_device,
+    "get-dns-nameservers": TailscaleClient.get_dns_nameservers,
+    "get-dns-preferences": TailscaleClient.get_dns_preferences,
+    "get-search-paths": TailscaleClient.get_search_paths,
+    "list-authkeys": TailscaleClient.list_authkeys,
+    "list-devices": TailscaleClient.list_devices,
+    "list-webhooks": TailscaleClient.list_webhooks,
+    "set-subnet-routes": TailscaleClient.set_subnet_routes,
+    "update-acl": TailscaleClient.update_acl,
+    "update-device": TailscaleClient.update_device,
+    "update-dns-nameservers": TailscaleClient.update_dns_nameservers,
+    "update-dns-preferences": TailscaleClient.update_dns_preferences,
+    "update-search-paths": TailscaleClient.update_search_paths,
 }
 
 
@@ -812,12 +757,12 @@ def apply_dynamic_docs():
     for cmd in app_do.registered_commands:
         if cmd.name in _COMMAND_TO_API:
             api_func = _COMMAND_TO_API[cmd.name]
-            docstring = inspect.getdoc(api_func) or ""
-            schema = get_function_schema(api_func)
-
+            
             # Update Typer command attributes
-            cmd.help = format_rich_help(docstring, schema, full=True)
-            cmd.short_help = format_rich_help(docstring, schema, full=False)
+            # Detailed help: do <cmd> --help
+            cmd.help = format_rich_help(api_func, full=True)
+            # Global help: do --help
+            cmd.short_help = format_rich_help(api_func, full=False)
 
 
 # Initialize dynamic documentation
