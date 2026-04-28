@@ -9,33 +9,48 @@
 
 This facet defines the absolute usage contract for operators and AI agents interacting with `ts-proxy`.
 
-### 1.1 Installation Flows
+### 1.1 Installation & Uninstallation Flows (Symmetric)
 
-#### A. User Flow (One-Shot Release)
-For quick deployment without cloning the full repository.
+#### A. Release Flow (One-Shot / Appliance)
+For quick deployment without full repository management.
 
-*   **Sovereign Appliance (Docker)**:
+*   **Sovereign Appliance (Docker Script)**:
     ```bash
-    # Install via universal script (requires docker + python3)
+    # Install (requires docker + python3)
     curl -sSL https://raw.githubusercontent.com/KpihX/ts-proxy/main/scripts/install.sh | bash
-    ```
-*   **Python Package (PyPI)**:
-    ```bash
-    # Recommended (Isolated)
-    pipx install ts-proxy
     
-    # Alternative (UV)
-    uv tool install ts-proxy
+    # Uninstall (Total Purge)
+    curl -sSL https://raw.githubusercontent.com/KpihX/ts-proxy/main/scripts/uninstall.sh | bash
     ```
 
-#### B. Developer Flow (Source Clone)
-For contributing or local environment customization.
+*   **Python Package (Isolated Environment)**:
+    ```bash
+    # Install (UV)
+    uv tool install ts-proxy
+    # Uninstall (UV)
+    uv tool uninstall ts-proxy
+
+    # Install (Pipx)
+    pipx install ts-proxy
+    # Uninstall (Pipx)
+    pipx uninstall ts-proxy
+    ```
+
+#### B. Source Flow (Git Clone)
+For local installation from a cloned repository.
 ```bash
 git clone https://github.com/KpihX/ts-proxy.git
 cd ts-proxy
-make uv-link          # For local Python dev
-# OR
-make docker-install   # For local Appliance testing
+
+# Install Host Appliance
+make uv-install
+# Uninstall Host Appliance
+make uv-uninstall
+
+# Install Docker Appliance
+make docker-install
+# Uninstall Docker Appliance
+make docker-uninstall
 ```
 
 ### 1.2 CLI Architecture & Execution Modes
@@ -167,26 +182,27 @@ ts-proxy/
 └── CHANGELOG.md           # Versioned evolution history.
 ```
 
-### 2.2 Development Workflows
-The project supports two main development modes:
+### 2.2 Development Workflows (Symmetric)
+For contributing or local environment customization.
 
-1.  **Local Dev (UV)**: High-speed iteration.
-    *   `make uv-link`: Installs the package in editable mode.
-    *   `ts-proxy <cmd>` runs directly from source.
-2.  **Appliance Mode (Docker)**: Real-world isolation test.
-    *   `make docker-install`: Builds image and installs host shim.
-    *   `ts-proxy <cmd>` orchestrates a container.
+```bash
+# Link Editable Dev Instance
+make uv-link
+# Unlink Editable Dev Instance
+make uv-unlink
+```
 
 ### 2.3 Mandatory Key Commands (Makefile)
 | Command | Role | Scope |
 |---------|------|-------|
 | `make uv-check` | **The Guardian**: Runs format, fix, compile, audit, and tests. | Dev |
-| `make uv-install` | Production install on host (locked dependencies). | Host |
+| `make uv-install` | Production install on host (locked dependencies). | Host/Prod |
 | `make uv-link` | Editable dev install. | Dev |
+| `make uv-unlink` | Remove dev link. | Dev |
 | `make uv-uninstall`| Full removal of local tools and links. | Cleanup |
 | `make docker-install`| Sovereign Appliance installation (Shim + Image). | Prod |
 | `make docker-uninstall`| Sovereign Appliance removal. | Cleanup |
-| `make uv-build` | Build Python sdist and wheel packages (clears `dist/`). | Dist |
+| `make uv-build` | Build Python packages (clears `dist/`). | Dist |
 | `make uv-publish` | Publish to PyPI (requires `UV_PUBLISH_TOKEN`). | Dist |
 | `make docker-publish`| Push image to Registry (GHCR/GitLab). | Dist |
 | `make git-release` | **Full Cycle**: Check, Tag, Push, Publish (All). | Lifecycle |
