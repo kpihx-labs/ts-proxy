@@ -26,13 +26,20 @@ This facet defines the strict external interface for operators and AI agents.
 ### CLI Architecture
 `ts-proxy` operates as a serverless appliance. A host-side shim (`ts-proxy`) orchestrates an ephemeral Docker container for each command.
 
-```mermaid
-graph TD
-    User["Operator / AI Agent"] -- "ts-proxy <cmd>" --> Shim["scripts/ts_proxy_shim.py"]
-    Shim -- "docker run --rm" --> Container["Docker Container (ts-proxy)"]
-    Container -- "HITL_REQUIRED" --> Shim
-    Shim -- "xdg-open" --> Browser["Host Web Browser"]
-    Container -- "HTTPS RPC" --> API["Tailscale API v2"]
+```text
+   ╔═════════════════════════╗        ╔════════════════════════════════════╗
+   ║  Operator / AI Agent    ║        ║       Host Web Browser             ║
+   ╚══════════════╦══════════╝        ╚══════════════════▲═════════════════╝
+                  ║                                      ║
+        ts-proxy  ▼  <cmd>                      [ xdg-open / open ]
+   ╔═════════════════════════╗                           ║
+   ║ scripts/ts_proxy_shim.py║ ══════════════════════════╝
+   ╚══════════════╦══════════╝      [ HITL_REQUIRED: http://127.0.0.1:1139 ]
+                  ║
+         docker   ▼   run --rm
+   ╔═════════════════════════╗        ╔════════════════════════════════════╗
+   ║ Docker Container (Core) ║ ══════▶║        Tailscale API v2            ║
+   ╚═════════════════════════╝        ╚════════════════════════════════════╝
 ```
 
 ### JSON-RPC 2.0 Pattern
@@ -90,8 +97,8 @@ ts-proxy/
 ├── docker-compose.yml     # Local appliance orchestration
 ├── pyproject.toml         # Dependency & Version Source of Truth
 ├── Makefile               # Universal Task Runner
-├── AGENTS.md              # THIS CONTRACT
-├── TODO.md                # Roadmap & Pending tasks
+├── CONTRACT.md            # THIS CONTRACT
+├── AGENTS.md              # High-level assistant instructions
 └── CHANGELOG.md           # Evolution history
 ```
 
