@@ -6,14 +6,14 @@ RULES FOR CONTRIBUTORS:
 2. DOCSTRING STRUCTURE: Every method MUST have exactly three sections in its docstring:
     - Description (Summary + Body)
     - Parameters: (List of fields or "- None")
-    - Examples: (Usage examples)
+    - Examples: (Usage examples, AT LEAST 3)
 3. ZERO TOLERANCE: Any deviation from these rules will break the dynamic documentation engine.
 """
 
 import json
 import os
 import httpx
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List
 
 from .models import (
     ACLUpdatePayload,
@@ -28,16 +28,8 @@ from .models import (
 )
 
 
-class SecureProxyError(Exception):
-    """Base exception for all proxy errors. Prevents stack traces and hides secrets."""
-
-    pass
-
-
-# Path resolution for both Host (UV) and Docker
-DEFAULT_DATA_DIR = os.path.expanduser("~/.ts-proxy")
-PERSISTED_SECRETS_PATH = os.path.join(DEFAULT_DATA_DIR, "secrets.json")
-PROD_SECRET_MOUNT = "/var/run/secrets/ts-auth.json"
+from .exceptions import SecureProxyError
+from .config import PERSISTED_SECRETS_PATH, PROD_SECRET_MOUNT
 
 
 class AuthManager:
@@ -171,7 +163,9 @@ class TailscaleClient:
                 `ts-proxy do authorize-device '{"device_id": "12345"}'`
         """
         await self._request(
-            "POST", f"/device/{payload.device_id}/authorized", json_data={"authorized": True}
+            "POST",
+            f"/device/{payload.device_id}/authorized",
+            json_data={"authorized": True},
         )
         return True
 
@@ -211,7 +205,9 @@ class TailscaleClient:
                 `ts-proxy do create-webhook '{"endpointUrl": "https://n8n.labs/webhook", "subscriptions": ["nodeCreated"]}'`
         """
         resp = await self._request(
-            "POST", f"/tailnet/{self.auth.tailnet}/webhooks", json_data=payload.model_dump()
+            "POST",
+            f"/tailnet/{self.auth.tailnet}/webhooks",
+            json_data=payload.model_dump(),
         )
         return resp.json()
 
@@ -228,7 +224,9 @@ class TailscaleClient:
             - Delete key:
                 `ts-proxy do delete-authkey '{"device_id": "k12345"}'`
         """
-        await self._request("DELETE", f"/tailnet/{self.auth.tailnet}/keys/{payload.device_id}")
+        await self._request(
+            "DELETE", f"/tailnet/{self.auth.tailnet}/keys/{payload.device_id}"
+        )
         return True
 
     async def delete_device(self, payload: DeviceIDPayload) -> bool:
@@ -430,7 +428,9 @@ class TailscaleClient:
                 `ts-proxy do set-subnet-routes '{"device_id": "123", "routes": ["192.168.1.0/24"]}'`
         """
         await self._request(
-            "POST", f"/device/{payload.device_id}/routes", json_data={"routes": payload.routes}
+            "POST",
+            f"/device/{payload.device_id}/routes",
+            json_data={"routes": payload.routes},
         )
         return True
 
@@ -454,7 +454,9 @@ class TailscaleClient:
         }
         async with httpx.AsyncClient() as client:
             url = f"{self.BASE_URL}/tailnet/{self.auth.tailnet}/acl"
-            resp = await client.post(url, headers=headers, content=payload.hujson_payload)
+            resp = await client.post(
+                url, headers=headers, content=payload.hujson_payload
+            )
             if resp.status_code >= 400:
                 raise SecureProxyError(f"Failed to update ACL: {resp.text}")
         return True

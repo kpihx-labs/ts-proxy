@@ -13,7 +13,6 @@ import os
 import typer
 import tempfile
 import functools
-import inspect
 from pathlib import Path
 from typing import Optional, Any, Callable, Dict
 from rich.console import Console
@@ -21,10 +20,17 @@ from rich.table import Table
 from pydantic import ValidationError
 
 from .api import (
-    PERSISTED_SECRETS_PATH,
     AuthManager,
     TailscaleClient,
-    SecureProxyError,
+)
+from .exceptions import SecureProxyError
+from .config import (
+    PERSISTED_SECRETS_PATH,
+    VERSION,
+    get_config_value,
+    set_config_value,
+    dump_config_text,
+    write_config_text,
 )
 from .models import (
     ACLUpdatePayload,
@@ -147,7 +153,7 @@ def parse_payload(payload_str: Optional[str]) -> dict:
 
 
 # --- Versioning ---
-VERSION = "1.1.0"
+# Loaded dynamically from config.py (which reads pyproject.toml)
 
 
 def version_callback(value: bool):
@@ -240,7 +246,9 @@ def require_hitl(action_name: str, payload: dict):
 
 def handle_error(e: Exception):
     if isinstance(e, ValidationError):
-        output_result({"status": "error", "message": "Validation failed", "errors": e.errors()})
+        output_result(
+            {"status": "error", "message": "Validation failed", "errors": e.errors()}
+        )
     else:
         output_result({"status": "error", "message": str(e)})
     sys.exit(1)
@@ -480,9 +488,7 @@ def delete_authkey(
 @app_do.command("delete-device")
 @autosave_output
 def delete_device(
-    payload: str = typer.Argument(
-        ..., help="JSON payload or path to JSON file."
-    ),
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
     output_file: Optional[Path] = typer.Option(
         None, "--output-file", "-o", help="Save output to file."
     ),
@@ -531,9 +537,7 @@ def get_acl(
 @app_do.command("get-device")
 @autosave_output
 def get_device(
-    payload: str = typer.Argument(
-        ..., help="JSON payload or path to JSON file."
-    ),
+    payload: str = typer.Argument(..., help="JSON payload or path to JSON file."),
     output_file: Optional[Path] = typer.Option(
         None, "--output-file", "-o", help="Save output to file."
     ),
@@ -757,7 +761,7 @@ def apply_dynamic_docs():
     for cmd in app_do.registered_commands:
         if cmd.name in _COMMAND_TO_API:
             api_func = _COMMAND_TO_API[cmd.name]
-            
+
             # Update Typer command attributes
             # Detailed help: do <cmd> --help
             cmd.help = format_rich_help(api_func, full=True)

@@ -3,11 +3,45 @@ import yaml
 from pathlib import Path
 from functools import lru_cache
 from typing import Any
+try:
+    from importlib.metadata import version as get_version
+except ImportError:
+    # Fallback for older python or non-installed package
+    def get_version(_):
+        return "1.1.0"
 
-from .api import SecureProxyError
+from .exceptions import SecureProxyError
 
+# --- Source Paths ---
 BUNDLED_CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
+# --- Dynamic Versioning ---
+def _get_project_version() -> str:
+    try:
+        return get_version("ts-proxy")
+    except Exception:
+        # Try reading pyproject.toml directly if not installed
+        pyproject_path = PROJECT_ROOT / "pyproject.toml"
+        if pyproject_path.exists():
+            with open(pyproject_path, "r") as f:
+                for line in f:
+                    if line.strip().startswith("version ="):
+                        return line.split("=")[1].strip().strip('"').strip("'")
+        return "1.1.0"
+
+VERSION = _get_project_version()
+
+# --- Path Resolution (Global Settings) ---
+def _resolve_data_dir() -> Path:
+    env_dir = os.environ.get("TS_PROXY_DATA")
+    if env_dir:
+        return Path(os.path.expanduser(env_dir))
+    return Path(os.path.expanduser("~/.ts-proxy"))
+
+DEFAULT_DATA_DIR = _resolve_data_dir()
+PERSISTED_SECRETS_PATH = DEFAULT_DATA_DIR / "secrets.json"
+PROD_SECRET_MOUNT = Path("/var/run/secrets/ts-auth.json")
 
 def _resolve_config_path() -> Path:
     """
@@ -21,9 +55,10 @@ def _resolve_config_path() -> Path:
     if explicit:
         return Path(os.path.expanduser(explicit))
 
-    runtime_data_dir = os.environ.get("TS_PROXY_DATA")
-    if runtime_data_dir:
-        return Path(os.path.expanduser(runtime_data_dir)) / "config.yaml"
+    # Check if config.yaml exists in the data directory
+    runtime_config = DEFAULT_DATA_DIR / "config.yaml"
+    if runtime_config.exists():
+        return runtime_config
 
     return BUNDLED_CONFIG_PATH
 

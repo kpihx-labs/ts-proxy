@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from ts_proxy.api import AuthManager, TailscaleClient, SecureProxyError
+from ts_proxy.api import AuthManager, TailscaleClient
+from ts_proxy.exceptions import SecureProxyError
 from ts_proxy.models import DeviceIDPayload
 
 
@@ -55,7 +56,6 @@ async def test_list_devices(mock_auth):
         args, kwargs = mock_req.call_args
         assert args[0] == "GET"
         assert args[1] == "https://api.tailscale.com/api/v2/tailnet/test.com/devices"
-
 
 
 @pytest.mark.asyncio
