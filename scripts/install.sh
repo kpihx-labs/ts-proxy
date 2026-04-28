@@ -1,8 +1,12 @@
 #!/bin/bash
 set -e
 
-# ts-proxy Universal Installer
+# ts-proxy Universal Installer (Release Mode)
 # Part of KpihX-Labs Sovereign Infrastructure
+
+# --- Configuration ---
+GITHUB_RAW_URL="https://raw.githubusercontent.com/KpihX/ts-proxy/main"
+DOCKER_IMAGE="kpihx/ts-proxy:latest"
 
 # --- Colors & Branding ---
 CYAN='\033[0;36m'
@@ -32,10 +36,8 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # --- Paths ---
-INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_DIR="${HOME}/.local/bin"
 DATA_DIR="${HOME}/.ts-proxy"
-SHIM_SRC="${INSTALL_DIR}/scripts/ts_proxy_shim.py"
 SHIM_DEST="${BIN_DIR}/ts-proxy"
 
 # --- Setup ---
@@ -43,13 +45,25 @@ echo -e "🛠️ Setting up directories..."
 mkdir -p "${BIN_DIR}"
 mkdir -p "${DATA_DIR}"
 
-echo -e "🐳 Building Sovereign Appliance (Docker)..."
-cd "${INSTALL_DIR}"
-docker build -t kpihx/ts-proxy:latest .
+# --- Image Deployment ---
+if [ -f "Dockerfile" ]; then
+    echo -e "🐳 Local repository detected. Building appliance..."
+    docker build -t "${DOCKER_IMAGE}" .
+else
+    echo -e "🚀 Release mode detected. Pulling appliance image..."
+    docker pull "${DOCKER_IMAGE}"
+fi
 
-echo -e "🔗 Installing host-side shim..."
-chmod +x "${SHIM_SRC}"
-ln -sf "${SHIM_SRC}" "${SHIM_DEST}"
+# --- Shim Deployment ---
+if [ -f "scripts/ts_proxy_shim.py" ]; then
+    echo -e "🔗 Linking host-side shim from local source..."
+    chmod +x "scripts/ts_proxy_shim.py"
+    ln -sf "$(pwd)/scripts/ts_proxy_shim.py" "${SHIM_DEST}"
+else
+    echo -e "📥 Downloading host-side shim from GitHub..."
+    curl -sSL "${GITHUB_RAW_URL}/scripts/ts_proxy_shim.py" -o "${SHIM_DEST}"
+    chmod +x "${SHIM_DEST}"
+fi
 
 # --- Finalize ---
 echo -e "\n${GREEN}✅ ts-proxy installed successfully!${NC}"

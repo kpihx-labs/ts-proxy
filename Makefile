@@ -3,7 +3,11 @@ PKG_NAME     := $(shell grep -m 1 name pyproject.toml | tr -s ' ' | tr -d '"' | 
 PKG_DIR_NAME := $(subst -,_,$(PKG_NAME))
 PKG_DIR      := src/$(PKG_DIR_NAME)
 VERSION      := $(shell grep -m 1 version pyproject.toml | tr -s ' ' | tr -d '"' | tr -d "'" | cut -d' ' -f3)
-DOCKER_IMAGE := kpihx/$(PKG_NAME):latest
+
+# --- Registry Configuration ---
+# Set REGISTRY to "ghcr.io/kpihx/" or "registry.gitlab.com/kpihx-labs/" as needed
+REGISTRY     ?= 
+DOCKER_IMAGE := $(REGISTRY)kpihx/$(PKG_NAME):latest
 
 # --- System Paths ---
 REAL_USER := $(if $(SUDO_USER),$(SUDO_USER),$(USER))
