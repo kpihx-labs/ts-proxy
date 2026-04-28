@@ -1,6 +1,7 @@
 # ts-proxy
 
-> Serverless Sovereign MCP Proxy for Tailscale Network Management (v1.1.0)
+> Serverless Sovereign MCP Proxy for Tailscale Network Management (v1.2.1)
+> **0% Hardcode · 100% Flexibility · Strict Alphabetical Order**
 
 Part of the **KpihX-Labs** architecture, `ts-proxy` is a secure, ephemeral CLI tool that runs inside the `docker-host` abstraction layer. It acts as an intelligent intermediary between your AI agents (running on Ubuntu/Mac) and the global Tailscale API.
 
@@ -8,9 +9,15 @@ Part of the **KpihX-Labs** architecture, `ts-proxy` is a secure, ephemeral CLI t
 
 1. **JSON-RPC 2.0 Paradigm**: All business logic commands follow a strict payload-driven model, decoupling API evolution from CLI flag stability.
 2. **Dynamic Sovereign Documentation**: Built-in introspection engine extracts rich docstrings and recursive JSON type schemas directly from the source code.
-3. **Runtime Secret Injection**: Authentication via Tailscale OAuth Clients, with credentials mounted as read-only memory files (`/var/run/secrets/`).
-4. **Human-In-The-Loop (HITL) Validation**: Critical operations require explicit web-based approval before execution.
-5. **Automatic Persistence (Autosave)**: Every command output is mirrored to `/tmp/ts-proxy/` on the host for auditability and transaction tracking.
+3. **Strict Alphabetical Ordering**: To ensure maintainability and predictable CLI UX, all API methods and CLI commands are sorted alphabetically.
+4. **Zero Hardcoding**: All versions, paths, and configurations are dynamically resolved or extracted from `pyproject.toml` and `config.yaml`.
+5. **Human-In-The-Loop (HITL) Validation**: Critical operations require explicit web-based approval before execution.
+
+## Documentation Stack
+
+- **[CONTRACT.md](CONTRACT.md)**: The total rigorous usage contract (Prod Facet) and sovereign development guide (Dev Facet). **Source of truth for technical specs.**
+- **[AGENTS.md](AGENTS.md)**: High-level instructions and mantras for AI agents assisting in this repository.
+- **[CHANGELOG.md](CHANGELOG.md)**: Evolution history and versioned releases.
 
 ## Usage
 
@@ -34,9 +41,6 @@ ts-proxy do list-devices
 
 # Targeted query with JSON payload
 ts-proxy do get-device '{"device_id": "12345"}'
-
-# Complex update via file
-ts-proxy do update-acl ./new_policy.hujson
 ```
 
 ### Administrative Control (`admin` namespace)
@@ -47,18 +51,12 @@ ts-proxy admin login
 
 # Check session status
 ts-proxy admin status
-
-# Clear local credentials
-ts-proxy admin logout
 ```
-
-## Persistence & Audit
-Outputs are automatically saved to `/tmp/ts-proxy/last_<command>.json`.
-These files are persisted on the host Ubuntu machine via Docker volume mapping.
 
 ## Architecture
 
 - **Core**: Python 3.12 (uv)
-- **Engine**: FastMCP (stdio), Httpx (Async)
-- **UI**: Rich (Console), Glassmorphism Web HITL (Approved by KpihX)
+- **Validation**: Pydantic V2 (Strict Payload Firewall)
+- **Engine**: Httpx (Async), Typer (CLI Interface)
+- **UI**: Glassmorphism Web HITL (Approved by KpihX)
 - **Runtime**: Ephemeral Docker Container (`ts-proxy:latest`)

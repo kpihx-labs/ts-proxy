@@ -44,12 +44,6 @@ from .models import (
     WebhookPayload,
 )
 from .hitl import prompt_review, prompt_config_edit
-from .config import (
-    get_config_value,
-    set_config_value,
-    dump_config_text,
-    write_config_text,
-)
 from .doc import format_rich_help
 
 console = Console()

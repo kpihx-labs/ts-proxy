@@ -3,6 +3,7 @@ import yaml
 from pathlib import Path
 from functools import lru_cache
 from typing import Any
+
 try:
     from importlib.metadata import version as get_version
 except ImportError:
@@ -10,11 +11,13 @@ except ImportError:
     def get_version(_):
         return "1.1.0"
 
+
 from .exceptions import SecureProxyError
 
 # --- Source Paths ---
 BUNDLED_CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 
 # --- Dynamic Versioning ---
 def _get_project_version() -> str:
@@ -30,7 +33,9 @@ def _get_project_version() -> str:
                         return line.split("=")[1].strip().strip('"').strip("'")
         return "1.1.0"
 
+
 VERSION = _get_project_version()
+
 
 # --- Path Resolution (Global Settings) ---
 def _resolve_data_dir() -> Path:
@@ -39,9 +44,11 @@ def _resolve_data_dir() -> Path:
         return Path(os.path.expanduser(env_dir))
     return Path(os.path.expanduser("~/.ts-proxy"))
 
+
 DEFAULT_DATA_DIR = _resolve_data_dir()
 PERSISTED_SECRETS_PATH = DEFAULT_DATA_DIR / "secrets.json"
 PROD_SECRET_MOUNT = Path("/var/run/secrets/ts-auth.json")
+
 
 def _resolve_config_path() -> Path:
     """
