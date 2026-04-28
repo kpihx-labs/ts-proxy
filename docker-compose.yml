@@ -1,0 +1,11 @@
+services:
+  ts-proxy:
+    build: .
+    image: kpihx/ts-proxy:latest
+    volumes:
+      - .:/app
+      - ~/.ts-proxy:/root/.ts-proxy
+      - /var/run/secrets/ts-auth.json:/var/run/secrets/ts-auth.json:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    network_mode: host

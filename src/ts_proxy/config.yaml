@@ -1,0 +1,6 @@
+hitl:
+  host: "127.0.0.1"
+  port: 1139
+  timeout_seconds: 120
+log_level: "INFO"
+tailnet_default: "-"

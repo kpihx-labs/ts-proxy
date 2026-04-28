@@ -11,7 +11,7 @@ Any deviation from this contract during implementation or future modifications r
 `ts-proxy` operates under a **Serverless Execution Model** via Docker. It MUST NOT maintain persistent background processes for request handling.
 
 ### Secrets Resolution Hierarchy
-The Python core (`src/ts_proxy/api.py`) MUST resolve Tailscale OAuth credentials (`client_id`, `client_secret`) strictly in this descending order:
+The Python core (`src/ts_proxy/api.py`) MUST resolve Tailscale OAuth credentials (`client_id`, `client_secret`, and potentially `tailnet_name`) strictly in this descending order:
 
 1. **CLI Explicit Path**: `--auth-file /path/to/custom.json`
 2. **Local Environment Variables**: `TS_CLIENT_ID` and `TS_CLIENT_SECRET` (Strictly for local testing).
@@ -32,13 +32,35 @@ docker run --rm \
 
 ## 2. Exhaustive CLI Surface Contract
 
+## Architecture
+
+`ts-proxy` operates as a sovereign, serverless appliance. It is executed via a host-side Python shim that orchestrates an ephemeral Docker container.
+
+```mermaid
+graph TD
+    User["Operator / AI Agent"] -- "ts-proxy <cmd>" --> Shim["scripts/ts_proxy_shim.py"]
+    Shim -- "docker run --rm" --> Container["Docker Container (ts-proxy)"]
+    Container -- "HITL_REQUIRED" --> Shim
+    Shim -- "xdg-open" --> Browser["Host Web Browser"]
+    Container -- "HTTPS RPC" --> API["Tailscale API v2"]
+```
+
+- **Host Shim**: Orchestrates Docker execution and intercepts HITL requests to pop the browser on the host.
+- **Docker Container**: Isolated runtime environment containing the Python logic and dependencies.
+- **Agnosticism**: No local Python environment required (beyond the shim); the same container runs anywhere.
+
 The CLI (`src/ts_proxy/cli.py`) is powered by `Typer`. It exposes two primary namespaces: `admin` and `do`.
 All `do` commands MUST accept a `--format json` flag and default to JSON output to guarantee reliable parsing by AI agents.
 
 ### The `admin` Namespace (Diagnostics)
 Commands for operator health checks. These MUST NEVER mutate network state.
-- `ts-proxy admin status`: Verifies API connectivity using the active credentials.
-- `ts-proxy admin auth-check`: Validates that the current token scopes match required permissions.
+- `ts-proxy admin login`: Interactive bootstrap of API credentials. Prompts for Client ID and Secret, validates them, and persists a `secrets.json` session within the Docker volume.
+- `ts-proxy admin logout`: Clears the persisted `secrets.json` session.
+- `ts-proxy admin status`: Verifies API connectivity using the active credentials. Outputs JSON status.
+- `ts-proxy admin auth-check`: Validates that the current token scopes match required permissions (`devices:read`, `network:write`, etc.).
+- `ts-proxy admin config get <path>`: Retrieves a specific configuration value from the configuration hierarchy.
+- `ts-proxy admin config set <path> <value>`: Sets a configuration value and persists it to `config.yaml`.
+- `ts-proxy admin config edit`: Opens an interactive HTTP-based YAML editor to validate and apply bulk configuration changes safely.
 
 ### The `do` Namespace (RPC Data/Action)
 This namespace maps exactly to the Tailscale API v2 capabilities. **Every mutating operation MUST invoke the HITL (Human-In-The-Loop) validation.**
