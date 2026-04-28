@@ -1,0 +1,25 @@
+stages:
+  - test
+  - deploy
+
+variables:
+  DOCKER_IMAGE: "kpihx/ts-proxy:latest"
+
+run_tests:
+  stage: test
+  tags:
+    - docker
+  script:
+    - make uv-check
+
+deploy_appliance:
+  stage: deploy
+  tags:
+    - homelab
+  only:
+    - main
+  script:
+    - echo "🚀 Deploying Sovereign Appliance to Homelab..."
+    # Build and Install locally on the runner host
+    - make docker-install
+    - echo "✅ Appliance deployed and shim linked."

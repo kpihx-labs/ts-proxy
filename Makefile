@@ -108,4 +108,19 @@ git-tag: ## Create a new git tag from pyproject.toml version
 git-push: ## Push current branch and tags to all remotes
 	@git push origin $$(git branch --show-current) --tags
 
-git-release: uv-check git-tag git-push ## Full Release: format → audit → test → tag → push
+# --- Distribution (PyPI & Docker Registry) ---
+
+uv-build: ## Build Python sdist and wheel
+	@echo "🏗️ Building Python package v$(VERSION)..."
+	@rm -rf dist/
+	@$(UV) build
+
+uv-publish: uv-build ## Publish to PyPI (requires UV_PUBLISH_TOKEN)
+	@echo "🚀 Publishing v$(VERSION) to PyPI..."
+	@$(UV) publish
+
+docker-publish: docker-build ## Push Docker image to registry
+	@echo "🚀 Pushing Docker image $(DOCKER_IMAGE)..."
+	@docker push $(DOCKER_IMAGE)
+
+git-release: uv-check git-tag git-push uv-publish docker-publish ## Full Release: check → tag → push → publish (Python & Docker)
