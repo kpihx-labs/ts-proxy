@@ -1,138 +1,176 @@
 # CONTRACT.md — ts-proxy
 
-> **0% Hardcode · 100% Flexibility**
-> Total Rigorous Usage Contract and Sovereign Development Guide.
-
-## KπX Mantras
-
-**Exploration:** Problem First → Why before How → Visualization
-**Architecture:** 0 Trust · 100% Control | 0 Magic · 100% Transparency | 0 Hardcoding · 100% Flexibility
-
-## Project Overview
-
-| Field | Value |
-|-------|-------|
-| Purpose | Sovereign Tailscale Proxy (Serverless Infrastructure) |
-| Stack | Python (uv), Typer, httpx, Pydantic V2, Docker |
-| Version | Dynamic (v1.2.1) |
-| Status | 🟢 Production Ready — Hardened, Sorted, and Documented |
+> **[100% COMPLETE, RIGOROUS, AND TOTALLY TRANSPARENT]**
+> **0% Hardcode · 100% Flexibility · Sovereign Infrastructure**
 
 ---
 
 ## 🏛️ Facet 1: PROD (Usage Contract)
 
-This facet defines the strict external interface for operators and AI agents.
+This facet defines the absolute usage contract for operators and AI agents interacting with `ts-proxy`.
 
-### CLI Architecture
-`ts-proxy` operates as a serverless appliance. A host-side shim (`ts-proxy`) orchestrates an ephemeral Docker container for each command.
+### 1.1 CLI Architecture & Execution Modes
+`ts-proxy` supports two execution paths, ensuring 100% transparency on how commands reach the Tailscale API.
 
 ```text
-   ╔═════════════════════════╗        ╔════════════════════════════════════╗
-   ║  Operator / AI Agent    ║        ║       Host Web Browser             ║
-   ╚══════════════╦══════════╝        ╚══════════════════▲═════════════════╝
-                  ║                                      ║
-        ts-proxy  ▼  <cmd>                      [ xdg-open / open ]
-   ╔═════════════════════════╗                           ║
-   ║ scripts/ts_proxy_shim.py║ ══════════════════════════╝
-   ╚══════════════╦══════════╝      [ HITL_REQUIRED: http://127.0.0.1:1139 ]
-                  ║
-         docker   ▼   run --rm
-   ╔═════════════════════════╗        ╔════════════════════════════════════╗
-   ║ Docker Container (Core) ║ ══════▶║        Tailscale API v2            ║
-   ╚═════════════════════════╝        ╚════════════════════════════════════╝
+   ╔═════════════════════════╗          ╔════════════════════════════════════╗
+   ║  Operator / AI Agent    ║          ║       Host Web Browser             ║
+   ╚══════════════╦══════════╝          ╚══════════════════▲═════════════════╝
+                  ║                                        ║
+                  ▼                                        ║
+    ┌───────────────────────────┐                [ xdg-open / open ]
+    │      Execution Choice     │                          ║
+    └─────┬──────────────┬──────┘                          ║
+          │              │                                 ║
+   [ MODE: DOCKER ]      [ MODE: LOCAL (UV) ]              ║
+          │              │                                 ║
+          ▼              ▼                                 ║
+   ╔══════════════╗      ╔══════════════╗                  ║
+   ║ scripts/     ║      ║ uv tool/     ║ ═════════════════╝
+   ║ ts_proxy_shim║      ║ ts-proxy bin ║      [ HITL: http://127.0.0.1:1139 ]
+   ╚══════╦═══════╝      ╚══════╦═══════╝
+          ║                     ║
+  docker  ▼  run --rm           ║
+   ╔══════════════╗             ║
+   ║ Docker       ║             ║
+   ║ Container    ║             ║
+   ╚══════╦═══════╝             ║
+          ║                     ║
+          ╚═════════╦═══════════╝
+                    ║
+                    ▼
+   ╔════════════════════════════════════╗
+   ║        Tailscale API v2            ║
+   ╚════════════════════════════════════╝
 ```
 
-### JSON-RPC 2.0 Pattern
-All `do` commands follow a strict JSON payload pattern. **No business parameters are allowed as CLI flags.**
+### 1.2 Lifecycle & Storage Contract
+Transparency on where data lives and how it persists across different execution modes.
 
-**General Syntax:**
-`ts-proxy do <command> '<json_payload>' [-o output.json] [-f table/json]`
+| Data Type | Mode: Docker (Appliance) | Mode: Local (UV/Dev) | Description |
+|-----------|--------------------------|-----------------------|-------------|
+| **Binary** | `/usr/local/bin/ts-proxy` (Shim) | `~/.local/bin/ts-proxy` (Link) | The entrypoint command. |
+| **Logic** | `KpihX/ts-proxy:latest` (Image) | `src/ts_proxy/` (Source) | Where the Python code resides. |
+| **Config** | `~/.ts-proxy/config.yaml` | `~/.ts-proxy/config.yaml` | User preferences and HITL ports. |
+| **Secrets** | `/var/run/secrets/ts-auth.json` | `~/.ts-proxy/secrets.json` | OAuth credentials for the API. |
+| **Autosave** | `/tmp/ts-proxy/` (Host Mount) | `/tmp/ts-proxy/` | JSON mirrors of all command outputs. |
 
-### Operations Registry (Alphabetical)
+### 1.3 The Help Engine (Two-Tier Documentation)
+`ts-proxy` utilizes a dynamic introspection engine to provide two levels of assistance:
 
-| Command | Payload Example | Description |
-|---------|-----------------|-------------|
-| `authorize-device` | `{"device_id": "..."}` | Approves a pending device. |
-| `create-authkey` | `{"capabilities": {"devices": {"create": {"reusable": true}}}}` | Generates a new auth key. |
-| `create-webhook` | `{"endpointUrl": "...", "subscriptions": ["nodeCreated"]}` | Registers a new webhook. |
-| `delete-authkey` | `{"device_id": "key_id"}` | Invalidates an auth key. |
-| `delete-device` | `{"device_id": "node_id"}` | **Destructive**: Removes a node. |
-| `delete-webhook` | `{"device_id": "wh_id"}` | Removes a webhook. |
-| `get-acl` | `{}` (Optional) | Returns HuJSON policy. |
-| `get-device` | `{"device_id": "..."}` | Returns detailed node metadata. |
-| `get-dns-nameservers` | `{}` | Lists global nameservers. |
-| `get-dns-preferences` | `{}` | Returns MagicDNS state. |
-| `get-search-paths` | `{}` | Lists DNS search domains. |
-| `list-authkeys` | `{}` | Lists all key metadata. |
-| `list-devices` | `{}` | Lists all nodes in tailnet. |
-| `list-webhooks` | `{}` | Lists all webhooks. |
-| `set-subnet-routes` | `{"device_id": "...", "routes": ["10.0.0.0/24"]}` | Configures CIDR routing. |
-| `update-acl` | `{"hujson_payload": "..."}` | **Destructive**: Replaces policy. |
-| `update-device` | `{"device_id": "...", "tags": ["tag:prod"]}` | Modifies device attributes. |
-| `update-dns-nameservers`| `{"nameservers": ["8.8.8.8"]}` | Updates global DNS. |
-| `update-dns-preferences`| `{"magicDNS": true}` | Toggles MagicDNS. |
-| `update-search-paths` | `{"paths": ["lan.internal"]}` | Updates search domains. |
+*   **Tier 1: Global Help (`ts-proxy do --help`)**: Displays a compact summary (Description first paragraph) and the simplified JSON schema for every command.
+*   **Tier 2: Detailed Help (`ts-proxy do <cmd> --help`)**: Displays the full tripartite docstring (Description, Parameters, Examples) and the complete recursive Pydantic JSON schema.
+
+### 1.4 Payload Contract (RPC Mode)
+All business operations in the `do` namespace REQUIRE a payload. The CLI is "intelligent" and handles two input formats:
+1.  **JSON String**: `ts-proxy do get-device '{"device_id": "..."}'`
+2.  **File Path**: `ts-proxy do update-acl ./policy.hujson` (The tool automatically detects the file, reads it, and validates the JSON content).
+
+### 1.5 Admin Namespace (Exhaustive Diagnostics)
+| Command | Action | Description |
+|---------|--------|-------------|
+| `admin login` | **Interactive Auth** | Prompts for Client ID/Secret and Tailnet. Validates and persists to `secrets.json`. |
+| `admin logout` | **Session Clear** | Deletes the local `secrets.json` file. |
+| `admin status` | **Connectivity** | Performs a non-destructive read to verify API reachability. |
+| `admin auth-check` | **Scope Validation** | Checks if OAuth tokens can be generated and lists active permissions. |
+| `admin config get <k>`| **Read Config** | Retrieves whitelisted keys (hitl_port, log_level, etc.). |
+| `admin config set <k> <v>`| **Write Config**| Updates and persists configuration keys to `config.yaml`. |
+| `admin config edit` | **Bulk Edit** | Opens the full `config.yaml` in a host browser for safe validation and save. |
+
+### 1.6 Operations Registry (Exhaustive Prod Contract)
+| Command | Payload Example (Input) | Expected Output (JSON) |
+|---------|-------------------------|-------------------------|
+| `authorize-device` | `{"device_id": "node_123"}` | `{"status": "approved", "authorized": true}` |
+| `create-authkey` | `{"capabilities": {...}}` | Full AuthKey Object (including Key secret) |
+| `create-webhook` | `{"endpointUrl": "...", ...}` | Created Webhook Object |
+| `delete-authkey` | `{"device_id": "key_456"}` | `{"status": "approved", "deleted": true}` |
+| `delete-device` | `{"device_id": "node_789"}` | `{"status": "approved", "deleted": true, ...}` |
+| `delete-webhook` | `{"device_id": "wh_000"}` | `{"status": "approved", "deleted": true}` |
+| `get-acl` | `{}` (Implicit) | `{"acl_hujson": "..."}` |
+| `get-device` | `{"device_id": "..."}` | Full Device Metadata Object |
+| `get-dns-nameservers` | `{}` | `{"nameservers": ["1.1.1.1", ...]}` |
+| `get-dns-preferences` | `{}` | `{"magicDNS": true/false}` |
+| `get-search-paths` | `{}` | `{"searchPaths": ["corp.lan", ...]}` |
+| `list-authkeys` | `{}` | `{"keys": [...]}` |
+| `list-devices` | `{}` | Array of Device Metadata Objects |
+| `list-webhooks` | `{}` | `{"webhooks": [...]}` |
+| `set-subnet-routes` | `{"device_id": "...", "routes": [...]}` | `{"status": "approved", "routes_set": true}` |
+| `update-acl` | `{"hujson_payload": "..."}` | `{"status": "approved", "acl_updated": true}` |
+| `update-device` | `{"device_id": "...", "tags": [...]}` | `{"status": "approved", "updated": true, ...}` |
+| `update-dns-nameservers`| `{"nameservers": [...]}` | `{"status": "approved", "nameservers_updated": true}` |
+| `update-dns-preferences`| `{"magicDNS": bool}` | `{"status": "approved", "preferences_updated": true}` |
+| `update-search-paths` | `{"paths": [...]}` | `{"status": "approved", "search_paths_updated": true}` |
 
 ---
 
 ## 🛠️ Facet 2: DEV (Development Guide)
 
-This facet defines the internal structure and rules for maintaining the appliance.
+This facet defines the absolute engineering standards for the project.
 
-### Project Structure
+### 2.1 Exhaustive Project Structure
 ```text
 ts-proxy/
-├── .git/hooks/pre-commit  # Auto-check gate (make uv-check)
-├── scripts/               # Host-side shim and utilities
-├── src/ts_proxy/          # Core Python Logic
-│   ├── api.py             # Tailscale Client (Sorted, Docstrings)
-│   ├── cli.py             # Typer Interface (Sorted, Registry)
-│   ├── models.py          # Pydantic V2 Payload Models
-│   ├── config.py          # Dehardcoded Config Logic
-│   ├── config.yaml        # Default bundled configuration
-│   ├── exceptions.py      # Centralized SecureProxyError
-│   └── doc.py             # Dynamic Help Engine
-├── tests/                 # 100% Coverage Test Suite
-├── Dockerfile             # Multi-stage production build
-├── docker-compose.yml     # Local appliance orchestration
-├── pyproject.toml         # Dependency & Version Source of Truth
-├── Makefile               # Universal Task Runner
-├── CONTRACT.md            # THIS CONTRACT
-├── AGENTS.md              # High-level assistant instructions
-└── CHANGELOG.md           # Evolution history
+├── .git/hooks/pre-commit  # Mandatory Gate: executes 'make uv-check'
+├── scripts/               # Host-side logic
+│   └── ts_proxy_shim.py   # Python Shim: Orchestrates Docker and HITL.
+├── src/ts_proxy/          # Internal Appliance Core
+│   ├── api.py             # Tailscale Client: Business logic, alphabetical.
+│   ├── cli.py             # Typer Entrypoint: Routings and Documentation injection.
+│   ├── models.py          # Pydantic V2: Payload validation (extra="forbid").
+│   ├── config.py          # Dehardcoding Engine: Dynamic version/paths.
+│   ├── config.yaml        # Configuration Source: Default settings.
+│   ├── exceptions.py      # Error System: Centralized SecureProxyError.
+│   ├── doc.py             # Doc Engine: Dynamic help rendering.
+│   └── hitl.py            # Approval Engine: Ephemeral Web UI.
+├── tests/                 # Quality Assurance
+│   ├── test_api.py        # Client unit tests.
+│   └── test_cli.py        # Interface regression tests.
+├── Dockerfile             # Multi-stage build (Security-first).
+├── docker-compose.yml     # Local dev orchestration.
+├── pyproject.toml         # Manifest: dependencies, scripts, and version.
+├── Makefile               # Universal Command Plane.
+├── CONTRACT.md            # THIS DOCUMENT: 100% Source of Truth.
+├── AGENTS.md              # High-level assistant instructions.
+├── TODO.md                # Roadmap tracking.
+└── CHANGELOG.md           # Versioned evolution history.
 ```
 
-### Key Development Commands
-Refer to the `Makefile` for full implementation details.
+### 2.2 Development Workflows
+The project supports two main development modes:
 
-| Command | Action | Scope |
-|---------|--------|-------|
-| `make uv-check` | **Mandatory Gate**: Format, Fix, Compile, Audit, Test. | Dev |
-| `make uv-install` | Install `ts-proxy` as a global `uv` tool. | Host |
-| `make uv-link` | Install in **editable mode** for live code changes. | Dev |
-| `make docker-install` | Full build and shim installation. | Prod |
-| `make docker-uninstall`| Wipe image and shim. | Cleanup |
-| `make git-commit` | Checked commit (requires `msg="..."`). | Lifecycle |
+1.  **Local Dev (UV)**: High-speed iteration.
+    *   `make uv-link`: Installs the package in editable mode.
+    *   `ts-proxy <cmd>` runs directly from source.
+2.  **Appliance Mode (Docker)**: Real-world isolation test.
+    *   `make docker-install`: Builds image and installs host shim.
+    *   `ts-proxy <cmd>` orchestrates a container.
 
-### Rules for Files (Zero Tolerance)
+### 2.3 Mandatory Key Commands (Makefile)
+| Command | Role |
+|---------|------|
+| `make uv-check` | **The Guardian**: Runs format, fix, compile, audit, and tests. |
+| `make uv-install` | Production install on host (locked dependencies). |
+| `make uv-link` | Editable dev install. |
+| `make uv-uninstall`| Full removal of local tools and links. |
+| `make docker-install`| Sovereign Appliance installation (Shim + Image). |
+| `make docker-uninstall`| Sovereign Appliance removal. |
 
-#### 1. `api.py` & `cli.py` (Alphabetical & Tripartite)
-- **STRICT ALPHABETICAL ORDER**: All methods and commands MUST be sorted ascending.
-- **TRIPARTITE DOCSTRINGS**: Every method must have:
-    1. **Description**: Clear business summary.
-    2. **Parameters**: List of fields (even if empty).
-    3. **Examples**: Real CLI usage examples.
-- **SCHEMA REGISTRY**: Any new `api.py` method MUST be added to `_COMMAND_TO_API` in `cli.py`.
+### 2.4 Immutable Edition Rules
 
-#### 2. `models.py` (Strict Typing)
-- Every payload MUST be a Pydantic `BaseModel` with `extra="forbid"`.
-- Use descriptive field names and `Field(description=...)` for auto-doc.
+#### R1: Alphabetical Order (`api.py`, `cli.py`)
+- Every operation MUST be kept in strict ascending alphabetical order.
+- This applies to methods in `TailscaleClient` and the `_COMMAND_TO_API` registry.
 
-#### 3. `config.py` (No Hardcoding)
-- **0% Hardcode**: No paths or versions in the code.
-- Extract `VERSION` from `pyproject.toml`.
-- Resolve `DEFAULT_DATA_DIR` and `SECRETS` via environment-aware logic.
+#### R2: Tripartite Docstrings (`api.py`)
+- Documentation is code. Every method must follow:
+    1.  **Description**: Summary line + Body.
+    2.  **Parameters**: Explicit field listing.
+    3.  **Examples**: At least 3 real-world CLI commands.
 
-#### 4. `exceptions.py` (Security)
-- All user-facing errors MUST use `SecureProxyError`.
-- Secrets MUST NEVER be leaked in exception messages or logs.
+#### R3: Zero Hardcoding (`config.py`)
+- Hardcoding a path, version, or constant in business logic is a failure.
+- Everything must be resolved via `config.py` using `pyproject.toml` or `config.yaml`.
+
+#### R4: Pydantic Guard (`models.py`)
+- Use Pydantic V2 for all payloads.
+- `extra="forbid"` is mandatory to prevent ghost parameters.
