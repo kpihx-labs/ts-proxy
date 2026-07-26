@@ -47,7 +47,13 @@ uv-test: ## Run all tests
 	@echo "🧪 Running test suite..."
 	@$(PYTEST) -v tests/
 
-uv-check: uv-format uv-fix uv-compile uv-audit uv-test ## Full quality gate: format → fix → compile → audit → test
+uv-check: uv-format uv-fix uv-compile uv-audit uv-test ## Development quality gate: format → fix → compile → audit → test
+
+audit: ## Audit infrastructure security (permissions, umask)
+	@echo "🛡️ Auditing infrastructure..."
+	@$(PYTHON) scripts/audit_infra.py
+
+check: uv-check audit ## Full Sovereign Gate: Dev checks + Infra Audit
 
 uv-install: ## Install locally using uv tool
 	@echo "📦 Installing $(PKG_NAME) v$(VERSION) locally..."
@@ -111,6 +117,8 @@ git-tag: ## Create a new git tag from pyproject.toml version
 
 git-push: ## Push current branch and tags to all remotes
 	@git push origin $$(git branch --show-current) --tags
+
+push: git-push ## Alias for git-push
 
 # --- Distribution (PyPI & Docker Registry) ---
 

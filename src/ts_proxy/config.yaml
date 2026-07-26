@@ -1,6 +1,8 @@
 hitl:
-  host: "127.0.0.1"
-  port: 1139
+  host: 127.0.0.1
+  port: 1143
   timeout_seconds: 120
-log_level: "INFO"
-tailnet_default: "-"
+  required_rationale: true
+
+log_level: INFO
+tailnet_default: '-'

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ts-proxy | Config Review (Diff)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #020617;
+            --card-bg: rgba(15, 23, 42, 0.9);
+            --primary: #fbbf24;
+            --success: #10b981;
+            --danger: #f43f5e;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            padding: 15px 30px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+        .title-group h1 { margin: 0; font-size: 18px; color: var(--primary); display: flex; align-items: center; gap: 10px; }
+        .rationale-panel {
+            padding: 12px 30px;
+            background: rgba(251, 191, 36, 0.08);
+            border-bottom: 1px solid rgba(251, 191, 36, 0.2);
+            font-size: 13px;
+            line-height: 1.4;
+            color: #cbd5e1;
+        }
+        .main {
+            flex: 1;
+            position: relative;
+        }
+        #editor {
+            position: absolute;
+            inset: 0;
+        }
+        .footer {
+            padding: 15px 30px;
+            background: rgba(15, 23, 42, 0.95);
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            z-index: 10;
+        }
+        .comment-box {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 15px;
+            color: white;
+            font-size: 14px;
+            outline: none;
+        }
+        .comment-box:focus { border-color: var(--primary); }
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-approve { background: var(--success); color: white; }
+        .btn-reject { background: var(--danger); color: white; }
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        
+        #overlay {
+            position: fixed; inset: 0; background: var(--bg); z-index: 2000;
+            display: none; flex-direction: column; justify-content: center; align-items: center;
+            text-align: center;
+        }
+        .overlay-icon { font-size: 60px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div id="overlay">
+        <div class="overlay-icon">⚙️</div>
+        <h1 id="overlay-title">Config Saved</h1>
+        <p id="overlay-msg">The new configuration has been applied.</p>
+    </div>
+
+    <div class="header">
+        <div class="title-group">
+            <span>🛠️</span>
+            <div>
+                <h1>config_edit</h1>
+                <p style="margin:0; font-size:11px; color:var(--text-muted)">Visual Config Diff Mode</p>
+            </div>
+        </div>
+        <div style="display:flex; gap:12px">
+            <button class="btn btn-reject" onclick="submit('REJECTED')"><span>❌</span> Cancel</button>
+            <button class="btn btn-approve" onclick="submit('APPROVED')"><span>⚡</span> Save & Apply</button>
+        </div>
+    </div>
+
+    <div class="rationale-panel" id="rationale-panel">
+        <strong style="color:var(--primary)">RATIONALE:</strong> <span id="rationale-text">{{RATIONALE}}</span>
+    </div>
+
+    <div class="main">
+        <div id="editor"></div>
+    </div>
+
+    <div class="footer">
+        <input type="text" id="comment" class="comment-box" placeholder="Audit log message...">
+    </div>
+
+    <script id="hitl-data" type="application/json">{{HITL_DATA_JSON}}</script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <script>
+        const data = JSON.parse(document.getElementById('hitl-data').textContent);
+        if (!data.rationale) document.getElementById('rationale-panel').style.display = 'none';
+
+        let originalContent = data.original_payload || "";
+        let modifiedContent = data.payload || "";
+        
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+        require(['vs/editor/editor.main'], function() {
+            const editorContainer = document.getElementById('editor');
+            
+            if (originalContent && originalContent !== modifiedContent) {
+                window.diffEditor = monaco.editor.createDiffEditor(editorContainer, {
+                    theme: 'vs-dark',
+                    automaticLayout: true,
+                    fontSize: 14,
+                    originalEditable: false,
+                    readOnly: false
+                });
+
+                window.diffEditor.setModel({
+                    original: monaco.editor.createModel(originalContent, 'yaml'),
+                    modified: monaco.editor.createModel(modifiedContent, 'yaml')
+                });
+                
+                window.getValue = () => window.diffEditor.getModifiedEditor().getValue();
+            } else {
+                window.editor = monaco.editor.create(editorContainer, {
+                    value: modifiedContent,
+                    language: 'yaml',
+                    theme: 'vs-dark',
+                    automaticLayout: true,
+                    fontSize: 14
+                });
+                window.getValue = () => window.editor.getValue();
+            }
+        });
+
+        async function submit(status) {
+            const content = window.getValue();
+            const response = await fetch('/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: data.id,
+                    status: status,
+                    payload: content,
+                    comment: document.getElementById('comment').value
+                })
+            });
+
+            if (response.ok) {
+                document.getElementById('overlay').style.display = 'flex';
+                if (status === 'REJECTED') {
+                    document.getElementById('overlay-title').innerText = 'Edit Cancelled';
+                    document.getElementById('overlay-msg').innerText = 'Changes were not saved.';
+                }
+                setTimeout(() => window.close(), 1500);
+            }
+        }
+    </script>
+</body>
+</html>

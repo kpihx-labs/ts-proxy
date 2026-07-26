@@ -89,15 +89,15 @@ make docker-uninstall
 ```
 
 ### 1.3 Lifecycle & Storage Contract
-Transparency on where data lives and how it persists across different execution modes.
+Transparency on where data lives, how it persists, and its security policy.
 
-| Data Type | Mode: Docker (Appliance) | Mode: Local (UV/Dev) | Description |
-|-----------|--------------------------|-----------------------|-------------|
-| **Binary** | `/usr/local/bin/ts-proxy` (Shim) | `~/.local/bin/ts-proxy` (Link) | The entrypoint command. |
-| **Logic** | `KpihX/ts-proxy:latest` (Image) | `src/ts_proxy/` (Source) | Where the Python code resides. |
-| **Config** | `~/.ts_proxy/config.yaml` | `~/.ts_proxy/config.yaml` | User preferences and HITL ports. |
-| **Secrets** | `/var/run/secrets/ts-auth.json` | `~/.ts_proxy/secrets.json` | OAuth credentials for the API. |
-| **Autosave** | `/tmp/ts_proxy/` (Host Mount) | `/tmp/ts_proxy/` | JSON mirrors of all command outputs. |
+| Data Type | Path (Host) | Mode: Docker | Mode: Local | Permission |
+|-----------|-------------|--------------|-------------|------------|
+| **Data Dir** | `~/.ts_proxy/` | Volume Mount | Local Dir | `700` |
+| **Secrets** | `.../secrets.json` | Persisted | Persisted | `600` |
+| **Config** | `.../config.yaml` | Persisted | Persisted | `600` |
+| **Logs** | `.../proxy.log` | Persisted | Persisted | `600` |
+| **Autosave** | `/tmp/ts_proxy/` | Host Mount | Local Dir | `700` |
 
 ### 1.4 The Help Engine (Two-Tier Documentation)
 `ts-proxy` utilizes a dynamic introspection engine to provide two levels of assistance:
@@ -121,29 +121,71 @@ All business operations in the `do` namespace REQUIRE a payload. The CLI is "int
 | `admin config set <k> <v>`| **Write Config**| Updates and persists configuration keys to `config.yaml`. |
 | `admin config edit` | **Bulk Edit** | Opens the full `config.yaml` in a host browser for safe validation and save. |
 
-### 1.7 Operations Registry (Exhaustive Prod Contract)
-| Command | Payload Example (Input) | Expected Output (JSON) |
-|---------|-------------------------|-------------------------|
-| `authorize-device` | `{"device_id": "node_123"}` | `{"status": "approved", "authorized": true}` |
-| `create-authkey` | `{"capabilities": {...}}` | Full AuthKey Object (including Key secret) |
-| `create-webhook` | `{"endpointUrl": "...", ...}` | Created Webhook Object |
-| `delete-authkey` | `{"device_id": "key_456"}` | `{"status": "approved", "deleted": true}` |
-| `delete-device` | `{"device_id": "node_789"}` | `{"status": "approved", "deleted": true, ...}` |
-| `delete-webhook` | `{"device_id": "wh_000"}` | `{"status": "approved", "deleted": true}` |
-| `get-acl` | `{}` (Implicit) | `{"acl_hujson": "..."}` |
-| `get-device` | `{"device_id": "..."}` | Full Device Metadata Object |
-| `get-dns-nameservers` | `{}` | `{"nameservers": ["1.1.1.1", ...]}` |
-| `get-dns-preferences` | `{}` | `{"magicDNS": true/false}` |
-| `get-search-paths` | `{}` | `{"searchPaths": ["corp.lan", ...]}` |
-| `list-authkeys` | `{}` | `{"keys": [...]}` |
-| `list-devices` | `{}` | Array of Device Metadata Objects |
-| `list-webhooks` | `{}` | `{"webhooks": [...]}` |
-| `set-subnet-routes` | `{"device_id": "...", "routes": [...]}` | `{"status": "approved", "routes_set": true}` |
-| `update-acl` | `{"hujson_payload": "..."}` | `{"status": "approved", "acl_updated": true}` |
-| `update-device` | `{"device_id": "...", "tags": [...]}` | `{"status": "approved", "updated": true, ...}` |
-| `update-dns-nameservers`| `{"nameservers": [...]}` | `{"status": "approved", "nameservers_updated": true}` |
-| `update-dns-preferences`| `{"magicDNS": bool}` | `{"status": "approved", "preferences_updated": true}` |
-| `update-search-paths` | `{"paths": [...]}` | `{"status": "approved", "search_paths_updated": true}` |
+### 1.7 Operations Registry (100% API v2 Coverage)
+| Command | Payload Example (Input) | Description | HITL |
+|---------|-------------------------|-------------|------|
+| `authorize-device` | `{"device_id": "..."}` | Authorize a pending device. | ✅ |
+| `create-authkey` | `{"capabilities": {...}}` | Create a new authentication key. | ❌ |
+| `create-invitation` | `{"email": "...", ...}` | Create a new tailnet invitation. | ✅ |
+| `create-posture-check` | `{"type": "...", ...}` | Create a new posture check. | ✅ |
+| `create-webhook` | `{"endpointUrl": "...", ...}`| Create a new webhook. | ❌ |
+| `delete-authkey` | `{"device_id": "..."}` | Delete an authentication key. | ✅ |
+| `delete-device` | `{"device_id": "..."}` | Delete a device from the tailnet. | ✅ |
+| `delete-invitation` | `{"device_id": "..."}` | Delete a tailnet invitation. | ✅ |
+| `delete-posture-check` | `{"device_id": "..."}` | Delete a posture check. | ✅ |
+| `delete-webhook` | `{"device_id": "..."}` | Delete a webhook. | ✅ |
+| `expire-device` | `{"device_id": "..."}` | Expire a device node key. | ✅ |
+| `get-acl` | `{}` | Retrieve current ACL (HuJSON). | ❌ |
+| `get-contacts` | `{}` | Retrieve tailnet contact info. | ❌ |
+| `get-device` | `{"device_id": "..."}` | Retrieve device details. | ❌ |
+| `get-dns-nameservers` | `{}` | Retrieve global DNS nameservers. | ❌ |
+| `get-dns-preferences` | `{}` | Retrieve DNS preferences. | ❌ |
+| `get-invitation` | `{"device_id": "..."}` | Retrieve invitation details. | ❌ |
+| `get-posture-check` | `{"device_id": "..."}` | Retrieve posture check details. | ❌ |
+| `get-search-paths` | `{}` | Retrieve DNS search paths. | ❌ |
+| `get-settings` | `{}` | Retrieve tailnet settings. | ❌ |
+| `get-user` | `{"user_id": "..."}` | Retrieve specific user details. | ❌ |
+| `list-authkeys` | `{}` | List all active auth keys. | ❌ |
+| `list-devices` | `{}` | List all devices in tailnet. | ❌ |
+| `list-invitations` | `{}` | List all pending invitations. | ❌ |
+| `list-posture-checks` | `{}` | List all posture checks. | ❌ |
+| `list-webhooks` | `{}` | List all configured webhooks. | ❌ |
+| `list-users` | `{}` | List all users in tailnet. | ❌ |
+| `restore-user` | `{"user_id": "..."}` | Restore a suspended user account. | ✅ |
+| `set-device-key-expiry` | `{"device_id": "...", ...}`| Disable/Enable node key expiry. | ✅ |
+| `set-subnet-routes` | `{"device_id": "...", ...}`| Configure subnet routes. | ✅ |
+| `suspend-user` | `{"user_id": "..."}` | Suspend a user account. | ✅ |
+| `update-acl` | `{"hujson_payload": "..."}`| Update ACL (with Visual Diff). | ✅ |
+| `update-contacts` | `{"support": {...}, ...}` | Update tailnet contact info. | ✅ |
+| `update-device` | `{"device_id": "...", ...}`| Update device tags/attributes. | ✅ |
+| `update-dns-nameservers`| `{"nameservers": [...]}` | Update global DNS nameservers. | ✅ |
+| `update-dns-preferences`| `{"magicDNS": bool}` | Update DNS preferences. | ✅ |
+| `update-posture-check` | `{"id": "...", ...}` | Update existing posture check. | ✅ |
+| `update-search-paths` | `{"paths": [...]}` | Update DNS search paths. | ✅ |
+| `update-settings` | `{...}` | Update global tailnet settings. | ✅ |
+| `update-user-role` | `{"user_id": "...", ...}`| Update a user's role. | ✅ |
+
+### 1.8 Data Lifecycle & Hardening (100% Stricte)
+To ensure sovereignty, `ts-proxy` enforces a strict 0-trust file policy.
+
+#### A. Creation Patterns
+*   **Mode: Dev/Local (`uv`)**: Lazy creation. Directories and files are created ONLY when first needed (e.g., `admin login`), but always with strict permissions.
+*   **Mode: Prod/Docker**: Proactive creation. The shim ensures `~/.ts_proxy` and `/tmp/ts_proxy` exist and are secured BEFORE launching the container.
+*   **Mode: Release (`install.sh`)**: Direct creation. The installer locks the infrastructure during the setup phase.
+
+#### B. Permission Guard (Enforced at Runtime)
+The `ts_proxy.config.ensure_secure_infra()` function is called on every execution to verify and fix:
+1.  **Directories (`700`)**: `drwx------`. No other user can list or enter data folders.
+2.  **Files (`600`)**: `-rw-------`. Secrets and configuration are readable only by the owner.
+
+### 1.9 Sovereign Validation Engine (HITL)
+All destructive or administrative operations require human validation via a dual-channel engine.
+
+*   **Channel 1: Premium Web UI**: A Glassmorphism interface (🛡️) launched on `127.0.0.1:1139`.
+    *   **Edit Support**: Users can modify the JSON payload directly in the browser before approving.
+    *   **Feedback**: Users can leave comments that are logged for the AI agent's context.
+*   **Channel 2: TUI Fallback**: Automatic terminal prompt if no browser is available (headless/TTY).
+    *   Supports `Approve`, `Reject`, and `Edit` cycles directly in the terminal.
 
 ---
 
@@ -168,8 +210,10 @@ ts-proxy/
 │   ├── config.yaml        # Configuration Source: Default settings.
 │   ├── exceptions.py      # Error System: Centralized SecureProxyError.
 │   ├── doc.py             # Doc Engine: Dynamic help rendering.
-│   └── hitl.py            # Approval Engine: Ephemeral Web UI.
+│   ├── hitl.py            # Approval Engine: Dual-channel (Web+TUI) validation.
+│   └── logger.py          # Sovereign Logger: Rotating logs and 0-trust init.
 ├── tests/                 # Quality Assurance
+│   ├── conftest.py        # Automated HITL mocking for test suite.
 │   ├── test_api.py        # Client unit tests.
 │   └── test_cli.py        # Interface regression tests.
 ├── Dockerfile             # Multi-stage build (Security-first).
@@ -179,7 +223,7 @@ ts-proxy/
 ├── CONTRACT.md            # THIS DOCUMENT: 100% Source of Truth.
 ├── AGENTS.md              # High-level assistant instructions.
 ├── TODO.md                # Roadmap tracking.
-└── CHANGELOG.md           # Versioned evolution history.
+├── CHANGELOG.md           # Versioned evolution history.
 ```
 
 ### 2.2 Development Workflows (Symmetric)
@@ -195,7 +239,7 @@ make uv-unlink
 ### 2.3 Mandatory Key Commands (Makefile)
 | Command | Role | Scope |
 |---------|------|-------|
-| `make uv-check` | **The Guardian**: Runs format, fix, compile, audit, and tests. | Dev |
+| `make check` | **The Sovereign Guardian**: Runs uv-check + infrastructure audit. | Dev |
 | `make uv-install` | Production install on host (locked dependencies). | Host/Prod |
 | `make uv-link` | Editable dev install. | Dev |
 | `make uv-unlink` | Remove dev link. | Dev |
@@ -204,7 +248,7 @@ make uv-unlink
 | `make docker-uninstall`| Sovereign Appliance removal. | Cleanup |
 | `make uv-build` | Build Python packages (clears `dist/`). | Dist |
 | `make uv-publish` | Publish to PyPI (requires `UV_PUBLISH_TOKEN`). | Dist |
-| `make docker-publish`| Push image to Registry (GHCR/GitLab). | Dist |
+| `make docker-publish`| Push image to Registry (Docker Hub / GitLab). | Dist |
 | `make git-release` | **Full Cycle**: Check, Tag, Push, Publish (All). | Lifecycle |
 
 ### 2.4 Distribution & Credentials
@@ -232,3 +276,9 @@ For production distribution, the following environment variables are required:
 #### R4: Pydantic Guard (`models.py`)
 - Use Pydantic V2 for all payloads.
 - `extra="forbid"` is mandatory to prevent ghost parameters.
+
+### 2.6 Mandatory Validation Decorator (`@require_approval`)
+No destructive or network-altering method in `api.py` shall be implemented without the `@require_approval` decorator.
+- **Scope**: Methods like `delete_*`, `update_*`, `authorize_*`.
+- **Policy**: The decorator handles the entire HITL lifecycle (Server launch, Browser open, Result capture) before allowing the method to proceed.
+- **Editing**: Approval includes the right to modify the `payload` or `text` before execution.

@@ -1,346 +1,335 @@
-import http.server
+from pathlib import Path
+import os
+import asyncio
 import json
-import threading
-import socketserver
+import sys
 import uuid
+import webbrowser
+import threading
+from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any, Dict, Optional, Callable, Coroutine
+from functools import wraps
 
-from .config import HITL_HOST, HITL_PORT, HITL_TIMEOUT_SECONDS
+from .exceptions import SecureProxyError
+from .config import (
+    HITL_MAX_RETRIES,
+    REQUIRED_RATIONALE,
+    get_hitl_port,
+    HITL_HOST as CONFIG_HOST,
+)
 
-# Global state for HITL
-HITL_RESULT = None
-HITL_EVENT = threading.Event()
-
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>ts-proxy HITL Approval</title>
-    <style>
-        body {
-            background-color: #0f172a;
-            color: #f8fafc;
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .glass-panel {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            padding: 40px;
-            max-width: 600px;
-            width: 100%;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        }
-        h2 { margin-top: 0; color: #facc15; }
-        .payload {
-            background: #1e293b;
-            padding: 15px;
-            border-radius: 8px;
-            font-family: monospace;
-            white-space: pre-wrap;
-            color: #38bdf8;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        .buttons { display: flex; gap: 15px; margin-top: 30px; }
-        button {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .btn-approve {
-            background: #22c55e;
-            color: #fff;
-        }
-        .btn-approve:hover { background: #16a34a; }
-        .btn-reject {
-            background: #ef4444;
-            color: #fff;
-        }
-        .btn-reject:hover { background: #dc2626; }
-    </style>
-</head>
-<body>
-    <div class="glass-panel">
-        <h2>⚠️ Action Approval Required</h2>
-        <p><strong>Action:</strong> {action_name}</p>
-        <p><strong>Payload / Target:</strong></p>
-        <div class="payload">{payload_json}</div>
-        <div class="buttons">
-            <button class="btn-approve" onclick="submitDecision('approve')">APPROVE</button>
-            <button class="btn-reject" onclick="submitDecision('reject')">REJECT</button>
-        </div>
-    </div>
-    <script>
-        function submitDecision(decision) {
-            fetch('/submit?decision=' + decision, { method: 'POST' })
-                .then(() => {
-                    document.body.innerHTML = '<div class="glass-panel" style="text-align: center;"><h2>Response Received</h2><p>You can close this window.</p></div>';
-                    setTimeout(() => window.close(), 1500);
-                });
-        }
-    </script>
-</body>
-</html>
-"""
-
-HTML_EDITOR_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>ts-proxy Config Editor</title>
-    <style>
-        body {
-            background-color: #0f172a;
-            color: #f8fafc;
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .glass-panel {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            padding: 40px;
-            max-width: 800px;
-            width: 100%;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        }
-        h2 { margin-top: 0; color: #facc15; }
-        textarea {
-            background: #1e293b;
-            padding: 15px;
-            border-radius: 8px;
-            font-family: monospace;
-            color: #38bdf8;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            width: 100%;
-            height: 400px;
-            box-sizing: border-box;
-            resize: vertical;
-        }
-        .buttons { display: flex; gap: 15px; margin-top: 30px; }
-        button {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .btn-approve { background: #22c55e; color: #fff; }
-        .btn-approve:hover { background: #16a34a; }
-        .btn-reject { background: #ef4444; color: #fff; }
-        .btn-reject:hover { background: #dc2626; }
-    </style>
-</head>
-<body>
-    <div class="glass-panel">
-        <h2>ts-proxy Config Editor</h2>
-        <textarea id="yamlEditor">{yaml_content}</textarea>
-        <div class="buttons">
-            <button class="btn-approve" onclick="saveConfig()">SAVE & APPLY</button>
-            <button class="btn-reject" onclick="cancelEdit()">CANCEL</button>
-        </div>
-    </div>
-    <script>
-        function saveConfig() {
-            const content = document.getElementById('yamlEditor').value;
-            fetch('/submit-edit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain' },
-                body: content
-            }).then(() => {
-                document.body.innerHTML = '<div class="glass-panel" style="text-align: center;"><h2>Config Saved</h2><p>Validation will run in terminal. Close window.</p></div>';
-                setTimeout(() => window.close(), 1500);
-            });
-        }
-        function cancelEdit() {
-            fetch('/submit-cancel', { method: 'POST' }).then(() => {
-                document.body.innerHTML = '<div class="glass-panel" style="text-align: center;"><h2>Cancelled</h2><p>You can close this window.</p></div>';
-                setTimeout(() => window.close(), 1500);
-            });
-        }
-    </script>
-</body>
-</html>
-"""
+# --- ANSI Colors for TUI ---
+CYAN = "\033[0;36m"
+YELLOW = "\033[1;33m"
+GREEN = "\033[0;32m"
+RED = "\033[0;31m"
+BOLD = "\033[1m"
+NC = "\033[0m"
 
 
-class HITLRequestHandler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, action_name: str, payload: dict, tx_id: str, *args, **kwargs):
-        self.action_name = action_name
-        self.payload = payload
-        self.tx_id = tx_id
-        super().__init__(*args, **kwargs)
+@dataclass
+class HITLResponse:
+    status: str  # "APPROVED", "REJECTED", "ADJUSTED"
+    payload: Optional[Any] = None
+    comment: str = ""
 
-    def do_GET(self):
-        if self.path == f"/approve/{self.tx_id}":
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            payload_str = json.dumps(self.payload, indent=2)
-            html = HTML_TEMPLATE.replace("{action_name}", self.action_name).replace(
-                "{payload_json}", payload_str
-            )
-            self.wfile.write(html.encode("utf-8"))
-        else:
-            self.send_response(404)
-            self.end_headers()
 
-    def do_POST(self):
-        if self.path.startswith("/submit?decision="):
-            decision = self.path.split("=")[-1]
-            global HITL_RESULT
-            HITL_RESULT = decision == "approve"
-            self.send_response(200)
-            self.end_headers()
-            global HITL_EVENT
-            HITL_EVENT.set()
-        else:
-            self.send_response(404)
-            self.end_headers()
+class HITLServer(BaseHTTPRequestHandler):
+    """Centralized HITL UI Server with Glassmorphism design."""
+
+    active_requests: Dict[str, Dict[str, Any]] = {}
 
     def log_message(self, format, *args):
         pass
 
-
-class EditorRequestHandler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, yaml_content: str, tx_id: str, *args, **kwargs):
-        self.yaml_content = yaml_content
-        self.tx_id = tx_id
-        super().__init__(*args, **kwargs)
-
     def do_GET(self):
-        if self.path == f"/edit/{self.tx_id}":
+        if self.path.startswith("/review"):
+            query = self.path.split("?")[-1]
+            request_id = query.split("id=")[-1]
+
+            if request_id not in self.active_requests:
+                self.send_error(404, "Review request not found.")
+                return
+
+            req = self.active_requests[request_id]
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
-
-            # Very basic escaping for textarea
-            escaped = (
-                self.yaml_content.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-            )
-            html = HTML_EDITOR_TEMPLATE.replace("{yaml_content}", escaped)
-            self.wfile.write(html.encode("utf-8"))
+            self.wfile.write(self._render_ui(request_id, req).encode("utf-8"))
         else:
-            self.send_response(404)
-            self.end_headers()
+            self.send_error(404)
 
     def do_POST(self):
-        if self.path == "/submit-edit":
-            content_len = int(self.headers.get("Content-Length", 0))
-            post_body = self.rfile.read(content_len).decode("utf-8")
-            global HITL_RESULT
-            HITL_RESULT = post_body
-            self.send_response(200)
-            self.end_headers()
-            global HITL_EVENT
-            HITL_EVENT.set()
-        elif self.path == "/submit-cancel":
-            HITL_RESULT = None
-            self.send_response(200)
-            self.end_headers()
-            HITL_EVENT.set()
-        else:
-            self.send_response(404)
-            self.end_headers()
+        if self.path == "/submit":
+            content_length = int(self.headers["Content-Length"])
+            post_data = self.rfile.read(content_length).decode("utf-8")
+            data = json.loads(post_data)
 
-    def log_message(self, format, *args):
+            request_id = data.get("id")
+            if request_id in self.active_requests:
+                status = data.get("status")
+                payload = data.get("payload")
+                req = self.active_requests[request_id]
+
+                print(
+                    f"{GREEN}✓ HITL Submission received: {status} for {request_id}{NC}"
+                )
+
+                req["result"] = HITLResponse(
+                    status=status, payload=payload, comment=data.get("comment", "")
+                )
+
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
+
+                # Thread-safe event set
+                loop = req["loop"]
+                loop.call_soon_threadsafe(req["event"].set)
+            else:
+                print(f"{RED}❌ HITL Error: request_id {request_id} not found{NC}")
+                self.send_error(404)
+
+    def _render_ui(self, request_id: str, req: Dict[str, Any]) -> str:
+        """Renders the UI using specific or default template."""
+        func_name = req["func_name"]
+
+        # Determine template to use
+        template_dir = Path(__file__).parent / "template"
+        template_path = template_dir / f"{func_name}.html"
+        if not template_path.exists():
+            template_path = template_dir / "default.html"
+
+        try:
+            with open(template_path, "r") as f:
+                template = f.read()
+        except Exception as e:
+            return f"<html><body>Critical Error: Template {template_path.name} not found or unreadable: {e}</body></html>"
+
+        # Safe data injection via JSON blob
+        client_data = {
+            "id": request_id,
+            "func_name": func_name,
+            "rationale": req.get("rationale", ""),
+            "payload": req["payload"],
+            "original_payload": req.get("original_payload"),
+            "is_text": req.get("is_text", False),
+        }
+
+        data_json = json.dumps(client_data).replace("</script>", "<\\/script>")
+
+        # Simple template substitution
+        replacements = {
+            "{{HITL_DATA_JSON}}": data_json,
+            "{{FUNC_NAME}}": func_name,
+            "{{RATIONALE}}": req.get("rationale", ""),
+        }
+
+        rendered = template
+        for key, val in replacements.items():
+            rendered = rendered.replace(key, str(val))
+
+        return rendered
+
+
+def _terminal_prompt(request_id: str, req: Dict[str, Any]):
+    """TUI Fallback for terminal-based approval."""
+    print(f"\n{YELLOW}{BOLD}⚠️  HITL TERMINAL FALLBACK ACTIVE{NC}")
+    print(f"{CYAN}Function:{NC} {req['func_name']}")
+    if req.get("rationale"):
+        print(f"{CYAN}Rationale:{NC} {req['rationale']}")
+    payload_display = (
+        req["payload"] if req.get("is_text") else json.dumps(req["payload"], indent=2)
+    )
+    print(f"{CYAN}Content:{NC}\n{payload_display}")
+
+    while True:
+        choice = (
+            input(f"\n{BOLD}[A]pprove | [R]eject | [E]dit | [C]omment ? {NC}")
+            .strip()
+            .lower()
+        )
+
+        if choice == "a":
+            req["result"] = HITLResponse(status="APPROVED", payload=req["payload"])
+            req["event"].set()
+            break
+        elif choice == "r":
+            comment = input(f"{RED}Reason for rejection? {NC}").strip()
+            req["result"] = HITLResponse(status="REJECTED", comment=comment)
+            req["event"].set()
+            break
+        elif choice == "c":
+            comment = input(f"{YELLOW}Your comment? {NC}").strip()
+            print(f"{GREEN}✓ Comment attached. Please Approve or Reject now.{NC}")
+            req["comment_buffer"] = comment
+        elif choice == "e":
+            print(
+                f"{YELLOW}Paste the new content below (Press Ctrl+D when finished):{NC}"
+            )
+            try:
+                new_str = sys.stdin.read()
+                if not req.get("is_text"):
+                    req["payload"] = json.loads(new_str)
+                else:
+                    req["payload"] = new_str
+                print(f"{GREEN}✓ Content updated.{NC}")
+            except Exception as e:
+                print(f"{RED}❌ Invalid input: {e}{NC}")
+
+
+async def request_text_edit(
+    name: str,
+    initial_text: str,
+    rationale: str = "",
+    original_text: Optional[str] = None,
+) -> Optional[str]:
+    """Trigger a web UI for bulk text editing (e.g. config)."""
+    response = await request_approval(
+        name,
+        initial_text,
+        is_text=True,
+        rationale=rationale,
+        original_payload=original_text,
+    )
+    if response.status == "APPROVED":
+        return response.payload
+    return None
+
+
+async def request_approval(
+    func_name: str,
+    payload: Any,
+    is_text: bool = False,
+    rationale: str = "",
+    original_payload: Optional[Any] = None,
+) -> HITLResponse:
+    if REQUIRED_RATIONALE and not rationale:
+        raise SecureProxyError(f"Rationale is required for action: {func_name}")
+
+    request_id = str(uuid.uuid4())
+    event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    req_context = {
+        "func_name": func_name,
+        "payload": payload,
+        "original_payload": original_payload,
+        "is_text": is_text,
+        "rationale": rationale,
+        "event": event,
+        "loop": loop,
+        "result": None,
+        "comment_buffer": "",
+    }
+    HITLServer.active_requests[request_id] = req_context
+
+    host = CONFIG_HOST
+    port = get_hitl_port()
+
+    server = None
+    max_retries = HITL_MAX_RETRIES
+    for i in range(max_retries):
+        try:
+            server = HTTPServer((host, port + i), HITLServer)
+            port = port + i
+            break
+        except OSError as e:
+            if i == max_retries - 1:
+                raise SecureProxyError(f"Failed to start HITL server: {e}")
+            continue
+
+    url = f"http://{host}:{port}/review?id={request_id}"
+    print(f"\n{BOLD}🚀 [HITL] ACTION REVIEW REQUIRED{NC}")
+    print(f"🔗 BROWSER: {url}")
+
+    if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_TTY"):
+        print(f"{YELLOW}💡 SSH Detected: Ensure you have a tunnel active:{NC}")
+        print(f"   ssh -L {port}:localhost:{port} [your-host]")
+
+    print(f"HITL_REQUIRED: {url}")
+
+    try:
+
+        def serve_until_done():
+            while not event.is_set():
+                server.handle_request()
+
+        http_thread = threading.Thread(target=serve_until_done, daemon=True)
+        http_thread.start()
+
+        webbrowser.open(url)
+    except Exception:
         pass
 
+    if sys.stdin.isatty():
+        tui_thread = threading.Thread(
+            target=_terminal_prompt, args=(request_id, req_context), daemon=True
+        )
+        tui_thread.start()
 
-def prompt_review(action_name: str, payload: dict) -> bool:
-    """
-    Spawns the local web server, prints the magic string to stdout, and blocks.
-    Returns True if approved, False if rejected or timed out.
-    """
-    global HITL_RESULT, HITL_EVENT
-    HITL_RESULT = None
-    HITL_EVENT.clear()
+    await event.wait()
 
-    tx_id = str(uuid.uuid4())
-    port = HITL_PORT
-    host = HITL_HOST
+    response = req_context["result"]
+    if req_context["comment_buffer"] and not response.comment:
+        response.comment = req_context["comment_buffer"]
 
-    def handler(*args, **kwargs):
-        return HITLRequestHandler(action_name, payload, tx_id, *args, **kwargs)
+    del HITLServer.active_requests[request_id]
+    server.server_close()
 
-    try:
-        httpd = socketserver.TCPServer((host, port), handler)
-    except OSError:
-        httpd = socketserver.TCPServer((host, 0), handler)
-        port = httpd.server_address[1]
-
-    server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    server_thread.start()
-
-    print(f"HITL_REQUIRED: http://127.0.0.1:{port}/approve/{tx_id}")
-
-    hit = HITL_EVENT.wait(timeout=HITL_TIMEOUT_SECONDS)
-
-    httpd.shutdown()
-    httpd.server_close()
-
-    if not hit:
-        return False
-
-    return HITL_RESULT
+    return response
 
 
-def prompt_config_edit(yaml_content: str) -> str | None:
-    """
-    Spawns the web editor. Returns the modified string if saved, or None if cancelled/timeout.
-    """
-    global HITL_RESULT, HITL_EVENT
-    HITL_RESULT = None
-    HITL_EVENT.clear()
+def require_approval():
+    def decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
+        @wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            payload_obj = kwargs.get("payload") or (args[0] if args else None)
+            if not payload_obj:
+                return await func(self, *args, **kwargs)
 
-    tx_id = str(uuid.uuid4())
-    port = HITL_PORT
-    host = HITL_HOST
+            payload_dict = (
+                payload_obj.model_dump()
+                if hasattr(payload_obj, "model_dump")
+                else payload_obj
+            )
 
-    def handler(*args, **kwargs):
-        return EditorRequestHandler(yaml_content, tx_id, *args, **kwargs)
+            # Extract rationale and original_payload from kwargs if present
+            rationale = kwargs.get("rationale", "")
+            original_payload = kwargs.get("original_payload")
 
-    try:
-        httpd = socketserver.TCPServer((host, port), handler)
-    except OSError:
-        httpd = socketserver.TCPServer((host, 0), handler)
-        port = httpd.server_address[1]
+            response = await request_approval(
+                func.__name__,
+                payload_dict,
+                rationale=rationale,
+                original_payload=original_payload,
+            )
 
-    server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    server_thread.start()
+            if response.status == "REJECTED":
+                raise SecureProxyError(
+                    f"Rejected: {response.comment}"
+                    if response.comment
+                    else "Action rejected."
+                )
 
-    print(f"HITL_REQUIRED: http://127.0.0.1:{port}/edit/{tx_id}")
+            # If APPROVED or ADJUSTED (both return APPROVED status in this refined logic)
+            if response.payload:
+                if hasattr(payload_obj, "model_validate"):
+                    new_payload = payload_obj.__class__.model_validate(response.payload)
+                    if kwargs.get("payload"):
+                        kwargs["payload"] = new_payload
+                    else:
+                        args = (new_payload,) + args[1:]
+                else:
+                    if kwargs.get("payload"):
+                        kwargs["payload"] = response.payload
+                    else:
+                        args = (response.payload,) + args[1:]
 
-    hit = HITL_EVENT.wait(timeout=HITL_TIMEOUT_SECONDS)
+            return await func(self, *args, **kwargs)
 
-    httpd.shutdown()
-    httpd.server_close()
+        return wrapper
 
-    if not hit:
-        return None
-
-    return HITL_RESULT
+    return decorator

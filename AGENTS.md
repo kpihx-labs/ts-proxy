@@ -1,1 +1,1 @@
-/home/kpihx/Work/KpihX_Labs/Docker-Host/ts_proxy/.agents/AGENTS.md
+.agents/AGENTS.md

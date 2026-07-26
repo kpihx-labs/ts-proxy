@@ -23,5 +23,11 @@ COPY src/ src/
 # Install the application itself
 RUN uv pip install --system --no-cache .
 
+# Create a non-root user for security (Sovereign 0-Trust)
+RUN useradd -m -u 1000 -s /sbin/nologin tsuser && \
+    chown -R tsuser:tsuser /app
+USER tsuser
+ENV HOME=/home/tsuser
+
 # Set the entrypoint
 ENTRYPOINT ["ts-proxy"]

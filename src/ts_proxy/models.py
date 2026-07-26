@@ -10,6 +10,12 @@ class DeviceIDPayload(BaseModel):
     device_id: str = Field(..., description="The unique identifier (ID) of the device.")
 
 
+class DeviceNamePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device_id: str = Field(..., description="The unique identifier (ID) of the device.")
+    name: str = Field(..., description="The new name for the device.")
+
+
 class DeviceUpdatePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     device_id: str = Field(..., description="The unique identifier (ID) of the device.")
@@ -67,3 +73,57 @@ class WebhookPayload(BaseModel):
     subscriptions: List[str] = Field(
         ..., description="List of event types to subscribe to."
     )
+
+
+class UserIDPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: str = Field(..., description="The unique identifier (ID) of the user.")
+
+
+class UserRolePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: str = Field(..., description="The unique identifier (ID) of the user.")
+    role: str = Field(
+        ..., description="New role for the user (e.g., 'admin', 'member')."
+    )
+
+
+class DeviceExpiryPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device_id: str = Field(..., description="The unique identifier (ID) of the device.")
+    expiry: str = Field(..., description="Expiry date in RFC3339 format.")
+
+
+class DeviceKeyExpiryPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device_id: str = Field(..., description="The unique identifier (ID) of the device.")
+    keyExpiryDisabled: bool = Field(..., description="Whether key expiry is disabled.")
+
+
+class PostureCheckPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: Optional[str] = Field(
+        None, description="The ID of the posture check (for updates)."
+    )
+    type: str = Field(..., description="Type of posture check.")
+    description: str = Field(..., description="Description of the check.")
+    value: Any = Field(..., description="Value for the check.")
+
+
+class ContactPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    account: Optional[Dict[str, str]] = Field(None, description="Account contact info.")
+    support: Optional[Dict[str, str]] = Field(None, description="Support contact info.")
+    security: Optional[Dict[str, str]] = Field(
+        None, description="Security contact info."
+    )
+
+
+class SettingsPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")  # Flexible for global settings
+
+
+class InvitationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(..., description="Email of the invited user.")
+    role: str = Field("member", description="Role for the invited user.")

@@ -44,6 +44,7 @@ SHIM_DEST="${BIN_DIR}/ts-proxy"
 echo -e "🛠️ Setting up directories..."
 mkdir -p "${BIN_DIR}"
 mkdir -p "${DATA_DIR}"
+chmod 700 "${DATA_DIR}"
 
 # --- Image Deployment ---
 if [ -f "Dockerfile" ]; then

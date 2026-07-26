@@ -10,7 +10,7 @@ run_tests:
   tags:
     - docker
   script:
-    - make uv-check
+    - make check
 
 deploy_appliance:
   stage: deploy

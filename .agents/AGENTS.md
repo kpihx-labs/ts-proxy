@@ -16,7 +16,7 @@
 ## Mandatory Quality Gate
 
 > [!IMPORTANT]
-> **Zero-Failure Invariant**: Agents MUST NOT end their turn or declare a task finished until `make uv-check` returns a zero exit code (All Format, Audit, and Tests PASSED). If issues remain, the agent MUST continue correcting until the gate is cleared.
+> **Zero-Failure Invariant**: Agents MUST NOT end their turn or declare a task finished until `make check` returns a zero exit code (All Format, Audit, and Tests PASSED). If issues remain, the agent MUST continue correcting until the gate is cleared.
 
 ## Evolution Rules
 

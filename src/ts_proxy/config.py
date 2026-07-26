@@ -7,9 +7,9 @@ from typing import Any
 try:
     from importlib.metadata import version as get_version
 except ImportError:
-    # Fallback for older python or non-installed package
+
     def get_version(_):
-        return "1.1.0"
+        return "1.5.3"
 
 
 from .exceptions import SecureProxyError
@@ -24,20 +24,55 @@ def _get_project_version() -> str:
     try:
         return get_version("ts-proxy")
     except Exception:
-        # Try reading pyproject.toml directly if not installed
         pyproject_path = PROJECT_ROOT / "pyproject.toml"
         if pyproject_path.exists():
             with open(pyproject_path, "r") as f:
                 for line in f:
                     if line.strip().startswith("version ="):
                         return line.split("=")[1].strip().strip('"').strip("'")
-        return "1.1.0"
+        return "1.5.3"
 
 
 VERSION = _get_project_version()
 
+# --- INFRASTRUCTURE HARDENING (Sovereign 100% Stricte) ---
 
-# --- Path Resolution (Global Settings) ---
+
+def ensure_secure_infra():
+    """
+    Centralized 0-Trust Infrastructure Management.
+    Ensures directories exist with 700 and sensitive files with 600.
+    Enforces a process-wide umask of 077.
+    """
+    # 0. Global Lockdown: Force 600 for files and 700 for dirs by default
+    os.umask(0o077)
+
+    data_dir = _resolve_data_dir()
+    tmp_dir = Path("/tmp/ts_proxy")
+
+    # 1. Secure Main Data Directory (700)
+    if not data_dir.exists():
+        data_dir.mkdir(parents=True, mode=0o700)
+    else:
+        os.chmod(data_dir, 0o700)
+
+    # 2. Secure Temp Directory (700)
+    if not tmp_dir.exists():
+        tmp_dir.mkdir(parents=True, mode=0o700)
+    else:
+        os.chmod(tmp_dir, 0o700)
+
+    # 3. Secure Sensitive Files (600)
+    sensitive_files = [
+        data_dir / "secrets.json",
+        data_dir / "config.yaml",
+        data_dir / "proxy.log",
+    ]
+    for file_path in sensitive_files:
+        if file_path.exists():
+            os.chmod(file_path, 0o600)
+
+
 def _resolve_data_dir() -> Path:
     env_dir = os.environ.get("TS_PROXY_DATA")
     if env_dir:
@@ -47,26 +82,20 @@ def _resolve_data_dir() -> Path:
 
 DEFAULT_DATA_DIR = _resolve_data_dir()
 PERSISTED_SECRETS_PATH = DEFAULT_DATA_DIR / "secrets.json"
+LOG_PATH = DEFAULT_DATA_DIR / "proxy.log"
 PROD_SECRET_MOUNT = Path("/var/run/secrets/ts-auth.json")
+
+# Execute hardening immediately on module load
+ensure_secure_infra()
 
 
 def _resolve_config_path() -> Path:
-    """
-    Resolve the mutable config target.
-    Priority:
-    1. Explicit env override: TS_PROXY_CONFIG_PATH
-    2. Persistent runtime config in TS_PROXY_DATA
-    3. Bundled source config as a fallback.
-    """
     explicit = os.environ.get("TS_PROXY_CONFIG_PATH")
     if explicit:
         return Path(os.path.expanduser(explicit))
-
-    # Check if config.yaml exists in the data directory
     runtime_config = DEFAULT_DATA_DIR / "config.yaml"
     if runtime_config.exists():
         return runtime_config
-
     return BUNDLED_CONFIG_PATH
 
 
@@ -107,7 +136,6 @@ def load_config(config_path=CONFIG_PATH, **overrides) -> dict:
 
     if config is None:
         config = {}
-
     return deep_update(config, overrides)
 
 
@@ -125,33 +153,40 @@ def update_config(new_values: dict, config_path=CONFIG_PATH):
 
     updated_data = deep_update(data, new_values)
 
-    config_path.parent.mkdir(parents=True, exist_ok=True)
+    # Use centralized infrastructure hardening before write
+    ensure_secure_infra()
+
     with open(config_path, "w", encoding="utf-8") as f:
         yaml.dump(updated_data, f, default_flow_style=False, sort_keys=False)
+
+    # Ensure the newly created config file is also 600 if it's in DATA_DIR
+    if config_path.parent == DEFAULT_DATA_DIR:
+        os.chmod(config_path, 0o600)
 
     load_config.cache_clear()
 
 
 def write_config_text(raw_text: str, config_path=CONFIG_PATH) -> dict:
-    """Validate and persist the full YAML config text."""
     config_path = Path(config_path)
     try:
         parsed = yaml.safe_load(raw_text) or {}
     except yaml.YAMLError as e:
         raise SecureProxyError(f"YAML parsing error: {e}")
-
     if not isinstance(parsed, dict):
         raise SecureProxyError("Configuration root must be a YAML mapping.")
 
-    config_path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_secure_infra()
     with open(config_path, "w", encoding="utf-8") as f:
         f.write(raw_text)
+
+    if config_path.parent == DEFAULT_DATA_DIR:
+        os.chmod(config_path, 0o600)
+
     load_config.cache_clear()
     return parsed
 
 
 def dump_config_text(config_path=CONFIG_PATH) -> str:
-    """Return the current raw config file text."""
     config_path = Path(config_path)
     if config_path.exists():
         return config_path.read_text(encoding="utf-8")
@@ -171,9 +206,9 @@ def get_config_value(path: str, config_path=CONFIG_PATH) -> Any:
 
 
 def set_config_value(path: str, value: Any, config_path=CONFIG_PATH) -> Any:
-    parts = path.split(".")
-    if not parts:
+    if not path or not path.strip():
         raise ValueError("Configuration path cannot be empty.")
+    parts = path.split(".")
     nested: dict[str, Any] = {}
     cursor = nested
     for part in parts[:-1]:
@@ -185,10 +220,22 @@ def set_config_value(path: str, value: Any, config_path=CONFIG_PATH) -> Any:
     return get_config_value(path, config_path=config_path)
 
 
-# Extract commonly used constants directly
 _config = load_config()
 _hitl_config = _config.get("hitl", {})
 
 HITL_HOST = str(_hitl_config.get("host", "127.0.0.1"))
-HITL_PORT = int(_hitl_config.get("port", 1139))
+_DEFAULT_HITL_PORT = int(_hitl_config.get("port", 1143))
 HITL_TIMEOUT_SECONDS = int(_hitl_config.get("timeout_seconds", 120))
+HITL_MAX_RETRIES = int(_hitl_config.get("max_retries", 5))
+REQUIRED_RATIONALE = bool(_hitl_config.get("required_rationale", True))
+
+_hitl_port_override: int | None = None
+
+
+def set_hitl_port(port: int):
+    global _hitl_port_override
+    _hitl_port_override = port
+
+
+def get_hitl_port() -> int:
+    return _hitl_port_override or _DEFAULT_HITL_PORT
