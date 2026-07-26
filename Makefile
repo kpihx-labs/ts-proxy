@@ -116,7 +116,8 @@ git-tag: ## Create a new git tag from pyproject.toml version
 	@git tag -a v$(VERSION) -m "Release v$(VERSION)"
 
 git-push: ## Push current branch and tags to all remotes
-	@git push origin $$(git branch --show-current) --tags
+	@git push github $$(git branch --show-current) --tags
+	@git push gitlab $$(git branch --show-current) --tags
 
 push: git-push ## Alias for git-push
 
