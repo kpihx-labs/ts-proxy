@@ -1,6 +1,6 @@
 [project]
 name = "ts-proxy"
-version = "1.1.0"
+version = "1.1.1"
 description = "Serverless Sovereign MCP Proxy for Tailscale Network Management"
 readme = "README.md"
 authors = [

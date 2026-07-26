@@ -123,11 +123,15 @@ def test_cli_config_get_unauthorized():
 
 
 def test_admin_login():
+    def mock_run(coro):
+        coro.close()
+        return "token"
+
     with (
         patch("ts_proxy.cli.console.print"),
         patch("typer.prompt", side_effect=["id", "secret", "t"]),
         patch("ts_proxy.cli.AuthManager") as mock_auth_class,
-        patch("ts_proxy.cli.run_async", return_value="token"),
+        patch("ts_proxy.cli.run_async", side_effect=mock_run),
         patch("builtins.open", mock_open()) as m,
         patch("ts_proxy.cli.output_result"),
     ):
@@ -140,11 +144,22 @@ def test_admin_login():
 
 
 def test_admin_login_error():
+    def mock_run_error(coro):
+        try:
+            coro.close()
+        except Exception:
+            pass
+        try:
+            coro.send(None)
+        except (StopIteration, RuntimeError):
+            pass
+        raise SecureProxyError("Login failed")
+
     with (
         patch("ts_proxy.cli.console.print"),
         patch("typer.prompt", side_effect=["id", "secret", "t"]),
         patch("ts_proxy.cli.AuthManager"),
-        patch("ts_proxy.cli.run_async", side_effect=SecureProxyError("Login failed")),
+        patch("ts_proxy.cli.run_async", side_effect=mock_run_error),
         patch("ts_proxy.cli.handle_error") as mock_handle,
     ):
         runner.invoke(app, ["admin", "login"])
@@ -166,9 +181,13 @@ def test_admin_logout_no_session():
 
 
 def test_config_edit():
+    def mock_run(coro):
+        coro.close()
+        return "a: 2"
+
     with (
         patch("ts_proxy.cli.dump_config_text", return_value="a: 1"),
-        patch("ts_proxy.cli.run_async", return_value="a: 2"),
+        patch("ts_proxy.cli.run_async", side_effect=mock_run),
         patch("ts_proxy.cli.write_config_text") as mock_write,
     ):
         result = runner.invoke(app, ["admin", "config", "edit", "-r", "test"])
@@ -177,9 +196,13 @@ def test_config_edit():
 
 
 def test_config_edit_cancel():
+    def mock_run(coro):
+        coro.close()
+        return None
+
     with (
         patch("ts_proxy.cli.dump_config_text", return_value="a: 1"),
-        patch("ts_proxy.cli.run_async", return_value=None),
+        patch("ts_proxy.cli.run_async", side_effect=mock_run),
     ):
         result = runner.invoke(app, ["admin", "config", "edit", "-r", "test"])
         assert result.exit_code == 0
@@ -204,9 +227,13 @@ def test_config_set_int_error():
 
 
 def test_admin_status_error():
+    def mock_run_error(coro):
+        coro.close()
+        raise SecureProxyError("API Down")
+
     with (
         patch("ts_proxy.cli.get_client"),
-        patch("ts_proxy.cli.run_async", side_effect=SecureProxyError("API Down")),
+        patch("ts_proxy.cli.run_async", side_effect=mock_run_error),
     ):
         result = runner.invoke(app, ["admin", "status"])
         assert result.exit_code == 1
@@ -214,9 +241,13 @@ def test_admin_status_error():
 
 
 def test_admin_auth_check_error():
+    def mock_run_error(coro):
+        coro.close()
+        raise SecureProxyError("Auth Failed")
+
     with (
         patch("ts_proxy.cli.get_client"),
-        patch("ts_proxy.cli.run_async", side_effect=SecureProxyError("Auth Failed")),
+        patch("ts_proxy.cli.run_async", side_effect=mock_run_error),
     ):
         result = runner.invoke(app, ["admin", "auth-check"])
         assert result.exit_code == 1
@@ -224,9 +255,13 @@ def test_admin_auth_check_error():
 
 
 def test_admin_auth_check_success():
+    def mock_run(coro):
+        coro.close()
+        return "token"
+
     with (
         patch("ts_proxy.cli.get_client"),
-        patch("ts_proxy.cli.run_async", return_value="token"),
+        patch("ts_proxy.cli.run_async", side_effect=mock_run),
     ):
         result = runner.invoke(app, ["admin", "auth-check"])
         assert result.exit_code == 0
