@@ -13,7 +13,7 @@ def mock_hitl_approval():
 
 @pytest.fixture(autouse=True, scope="session")
 def isolate_infra(tmp_path_factory):
-    """Ensure tests never touch the real ~/.ts_proxy directory."""
+    """Ensure tests never touch the real ~/.config/ts-proxy directory."""
     tmp_dir = tmp_path_factory.mktemp("ts_proxy_isolate")
 
     with (

@@ -93,7 +93,7 @@ Transparency on where data lives, how it persists, and its security policy.
 
 | Data Type | Path (Host) | Mode: Docker | Mode: Local | Permission |
 |-----------|-------------|--------------|-------------|------------|
-| **Data Dir** | `~/.ts_proxy/` | Volume Mount | Local Dir | `700` |
+| **Data Dir** | `~/.config/ts-proxy/` | Volume Mount | Local Dir | `700` |
 | **Secrets** | `.../secrets.json` | Persisted | Persisted | `600` |
 | **Config** | `.../config.yaml` | Persisted | Persisted | `600` |
 | **Logs** | `.../proxy.log` | Persisted | Persisted | `600` |
@@ -170,7 +170,7 @@ To ensure sovereignty, `ts-proxy` enforces a strict 0-trust file policy.
 
 #### A. Creation Patterns
 *   **Mode: Dev/Local (`uv`)**: Lazy creation. Directories and files are created ONLY when first needed (e.g., `admin login`), but always with strict permissions.
-*   **Mode: Prod/Docker**: Proactive creation. The shim ensures `~/.ts_proxy` and `/tmp/ts_proxy` exist and are secured BEFORE launching the container.
+*   **Mode: Prod/Docker**: Proactive creation. The shim ensures `~/.config/ts-proxy` and `/tmp/ts_proxy` exist and are secured BEFORE launching the container.
 *   **Mode: Release (`install.sh`)**: Direct creation. The installer locks the infrastructure during the setup phase.
 
 #### B. Permission Guard (Enforced at Runtime)

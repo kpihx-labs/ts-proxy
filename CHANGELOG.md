@@ -1,5 +1,14 @@
 # CHANGELOG — ts-proxy
 
+## [1.2.0] - 2026-08-15
+### Changed
+- **Config dir migrated to XDG convention**: default data/config directory moved from `~/.ts_proxy` to `~/.config/ts-proxy/`. `TS_PROXY_DATA` and `TS_PROXY_CONFIG_PATH` still override the default.
+- **Project directory renamed**: `ts_proxy` → `ts-proxy` to match the KπX kebab-case naming convention (package dir in `src/` stays `ts_proxy`).
+- Updated `Makefile`, `install.sh`, `uninstall.sh`, `scripts/audit_infra.py`, `scripts/ts_proxy_shim.py` (host path) and `CONTRACT.md` to reference the new config location.
+
+### Fixed
+- Migrated existing persisted data from `~/.ts_proxy` to `~/.config/ts-proxy/` (keeps `secrets.json` structure expected by `AuthManager`).
+
 ## [1.1.0] - 2026-04-28
 ### Added
 - **JSON-RPC 2.0 Pattern**: Transitioned all business logic commands in the `do` namespace to a strict JSON-RPC payload model.

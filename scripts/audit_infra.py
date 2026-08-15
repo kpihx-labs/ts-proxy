@@ -29,7 +29,7 @@ def audit():
     # Trigger application-level hardening
     ensure_secure_infra()
     
-    data_dir = Path.home() / ".ts_proxy"
+    data_dir = Path.home() / ".config" / "ts-proxy"
     tmp_dir = Path("/tmp/ts_proxy")
     
     all_passed = True

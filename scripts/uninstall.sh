@@ -14,7 +14,7 @@ echo -e "${CYAN}⌫ Uninstalling ts-proxy...${NC}"
 # --- Paths ---
 BIN_DIR="${HOME}/.local/bin"
 SHIM_DEST="${BIN_DIR}/ts-proxy"
-DATA_DIR="${HOME}/.ts_proxy"
+DATA_DIR="${HOME}/.config/ts-proxy"
 TMP_DIR="/tmp/ts_proxy"
 
 # --- Removal ---

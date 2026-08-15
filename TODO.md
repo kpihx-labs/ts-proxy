@@ -7,6 +7,7 @@
 - [x] **Dynamic Documentation Engine**: Automated extraction of rich docstrings and JSON schemas.
 - [x] **Automatic Autosave**: All outputs mirrored to `/tmp/ts_proxy/`.
 - [x] **Project Hygiene**: Full quality gate with `uv`, `pytest`, and `ruff`.
+- [x] **Config Dir Migration (v1.2.0)**: Default config moved from `~/.ts_proxy` to `~/.config/ts-proxy/`. Persisted `secrets.json` migrated (structure kept as expected by `AuthManager` — `.env` format is NOT used by the code).
 
 ## 🛠️ Features & Evolution
 - [ ] **Interactive ACL Editor**: Use the browser-based HITL to provide a rich UI for editing HuJSON ACLs.

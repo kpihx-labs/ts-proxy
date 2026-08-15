@@ -10,7 +10,7 @@ from pathlib import Path
 # --- Configuration ---
 DEFAULT_IMAGE = "kpihx/ts-proxy:latest"
 DEFAULT_DATA_DIR = "/home/tsuser/.ts_proxy" # Inside container (Non-Root)
-HOST_DATA_DIR = Path.home() / ".ts_proxy"
+    HOST_DATA_DIR = Path.home() / ".config" / "ts-proxy"
 
 # --- Colors ---
 CYAN = "\033[0;36m"

@@ -13,7 +13,7 @@ DOCKER_IMAGE := $(REGISTRY)kpihx/$(PKG_NAME):latest
 REAL_USER := $(if $(SUDO_USER),$(SUDO_USER),$(USER))
 REAL_HOME := $(shell getent passwd $(REAL_USER) | cut -d: -f6)
 BIN_DIR   := $(REAL_HOME)/.local/bin
-DATA_DIR  := $(REAL_HOME)/.ts_proxy
+DATA_DIR  := $(REAL_HOME)/.config/ts-proxy
 
 # --- Tooling ---
 UV     := $(shell command -v uv 2>/dev/null || echo uv)

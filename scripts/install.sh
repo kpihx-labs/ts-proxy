@@ -37,7 +37,7 @@ fi
 
 # --- Paths ---
 BIN_DIR="${HOME}/.local/bin"
-DATA_DIR="${HOME}/.ts_proxy"
+DATA_DIR="${HOME}/.config/ts-proxy"
 SHIM_DEST="${BIN_DIR}/ts-proxy"
 
 # --- Setup ---
