@@ -4,25 +4,12 @@ PKG_DIR_NAME := $(subst -,_,$(PKG_NAME))
 PKG_DIR      := src/$(PKG_DIR_NAME)
 VERSION      := $(shell grep -m 1 version pyproject.toml | tr -s ' ' | tr -d '"' | tr -d "'" | cut -d' ' -f3)
 
-# --- Registry Configuration ---
-# Default: GitLab Container Registry under kpihx-labs/proxies (Option B, KπX 2026-09-05).
-# Project is public → `docker pull` needs no login; push needs registry write auth.
-# Override per-invocation, e.g.: make docker-build REGISTRY=ghcr.io/kpihx-labs/proxies/
-REGISTRY     ?= registry.gitlab.com/kpihx-labs/proxies/
-DOCKER_IMAGE := $(REGISTRY)$(PKG_NAME):latest
-
-# --- System Paths ---
-REAL_USER := $(if $(SUDO_USER),$(SUDO_USER),$(USER))
-REAL_HOME := $(shell getent passwd $(REAL_USER) | cut -d: -f6)
-BIN_DIR   := $(REAL_HOME)/.local/bin
-DATA_DIR  := $(REAL_HOME)/.config/ts-proxy
-
 # --- Tooling ---
 UV     := $(shell command -v uv 2>/dev/null || echo uv)
 PYTHON := $(UV) run python
 PYTEST := $(PYTHON) -m pytest
 
-.PHONY: help uv-audit uv-format uv-install uv-link uv-unlink uv-uninstall uv-test docker-build docker-link docker-install docker-uninstall docker-logs git-commit git-tag git-release
+.PHONY: help uv-audit uv-format uv-install uv-link uv-unlink uv-uninstall uv-test git-commit git-tag git-release
 
 help: ## Show help
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -71,32 +58,6 @@ uv-unlink: ## Uninstall local editable/tool version
 
 uv-uninstall: uv-unlink ## Alias for uv-unlink
 
-# --- Docker (Sovereign Appliance) ---
-
-docker-build: ## Build the Docker image
-	@echo "🐳 Building Docker image $(DOCKER_IMAGE)..."
-	@docker build -t $(DOCKER_IMAGE) .
-
-docker-link: ## Link the host-side shim to ~/.local/bin
-	@mkdir -p $(BIN_DIR)
-	@chmod +x scripts/ts_proxy_shim.py
-	@ln -sf $(CURDIR)/scripts/ts_proxy_shim.py $(BIN_DIR)/$(PKG_NAME)
-	@echo "✅ Docker shim installed in $(BIN_DIR)/$(PKG_NAME)"
-
-docker-install: docker-build docker-link ## Full Docker-based installation
-
-docker-uninstall: ## Remove Docker artifacts and shim
-	@rm -f $(BIN_DIR)/$(PKG_NAME)
-	@docker rmi $(DOCKER_IMAGE) 2>/dev/null || true
-	@echo "✅ $(PKG_NAME) uninstalled from Docker."
-
-docker-logs: ## View persistent logs from the host data directory
-	@if [ -f $(DATA_DIR)/proxy.log ]; then \
-		tail -f $(DATA_DIR)/proxy.log; \
-	else \
-		echo "❌ No logs found at $(DATA_DIR)/proxy.log"; \
-	fi
-
 # --- Git (Release & Lifecycle) ---
 
 git-init-hooks: ## Install git pre-commit hook
@@ -123,7 +84,7 @@ git-push: ## Push current branch and tags to all remotes
 
 push: git-push ## Alias for git-push
 
-# --- Distribution (PyPI & Docker Registry) ---
+# --- Distribution (PyPI) ---
 
 uv-build: ## Build Python sdist and wheel
 	@echo "🏗️ Building Python package v$(VERSION)..."
@@ -134,8 +95,4 @@ uv-publish: uv-build ## Publish to PyPI (requires UV_PUBLISH_TOKEN)
 	@echo "🚀 Publishing v$(VERSION) to PyPI..."
 	@$(UV) publish
 
-docker-publish: docker-build ## Push Docker image to registry
-	@echo "🚀 Pushing Docker image $(DOCKER_IMAGE)..."
-	@docker push $(DOCKER_IMAGE)
-
-git-release: uv-check git-tag git-push uv-publish docker-publish ## Full Release: check → tag → push → publish (Python & Docker)
+git-release: uv-check git-tag git-push uv-publish ## Full Release: check → tag → push → publish (Python)

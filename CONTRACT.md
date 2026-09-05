@@ -14,18 +14,9 @@ This facet defines the absolute usage contract for operators and AI agents inter
 #### A. Release Flow (One-Shot / Appliance)
 For quick deployment without full repository management.
 
-*   **Sovereign Appliance (Docker Script)**:
+*   **Python Package (Isolated Environment — the single supported path)**:
     ```bash
-    # Install (requires docker + python3)
-    curl -sSL https://raw.githubusercontent.com/kpihx-labs/ts-proxy/main/scripts/install.sh | bash
-    
-    # Uninstall (Total Purge)
-    curl -sSL https://raw.githubusercontent.com/kpihx-labs/ts-proxy/main/scripts/uninstall.sh | bash
-    ```
-
-*   **Python Package (Isolated Environment)**:
-    ```bash
-    # Install (UV)
+    # Install (UV, recommended — same as every other *-proxy)
     uv tool install ts-proxy
     # Uninstall (UV)
     uv tool uninstall ts-proxy
@@ -42,62 +33,42 @@ For local installation from a cloned repository.
 git clone https://github.com/kpihx-labs/ts-proxy.git
 cd ts-proxy
 
-# Install Host Appliance
+# Install
 make uv-install
-# Uninstall Host Appliance
+# Uninstall
 make uv-uninstall
-
-# Install Docker Appliance
-make docker-install
-# Uninstall Docker Appliance
-make docker-uninstall
 ```
 
-### 1.2 CLI Architecture & Execution Modes
-`ts-proxy` supports two execution paths, ensuring 100% transparency on how commands reach the Tailscale API.
+### 1.2 CLI Architecture & Execution Mode
+`ts-proxy` runs ONE execution path — the local `uv` tool binary — ensuring 100% transparency on how commands reach the Tailscale API.
 
 ```text
    ╔═════════════════════════╗          ╔════════════════════════════════════╗
    ║  Operator / AI Agent    ║          ║       Host Web Browser             ║
    ╚══════════════╦══════════╝          ╚══════════════════▲═════════════════╝
-                  ║                                        ║
-                  ▼                                        ║
-    ┌───────────────────────────┐                [ xdg-open / open ]
-    │      Execution Choice     │                          ║
-    └─────┬──────────────┬──────┘                          ║
-          │              │                                 ║
-   [ MODE: DOCKER ]      [ MODE: LOCAL (UV) ]              ║
-          │              │                                 ║
-          ▼              ▼                                 ║
-   ╔══════════════╗      ╔══════════════╗                  ║
-   ║ scripts/     ║      ║ uv tool/     ║ ═════════════════╝
-   ║ ts_proxy_shim║      ║ ts-proxy bin ║      [ HITL: http://127.0.0.1:1139 ]
-   ╚══════╦═══════╝      ╚══════╦═══════╝
-          ║                     ║
-  docker  ▼  run --rm           ║
-   ╔══════════════╗             ║
-   ║ Docker       ║             ║
-   ║ Container    ║             ║
-   ╚══════╦═══════╝             ║
-          ║                     ║
-          ╚═════════╦═══════════╝
-                    ║
-                    ▼
-   ╔════════════════════════════════════╗
-   ║        Tailscale API v2            ║
-   ╚════════════════════════════════════╝
+                   ║                                        ║
+                   ▼                                        ║
+    ╔══════════════╗                          [ xdg-open / open ]
+    ║ uv tool/     ║ ═════════════════════════╝
+    ║ ts-proxy bin ║      [ HITL: http://127.0.0.1:1139 ]
+    ╚══════╦═══════╝
+           ║
+           ▼
+    ╔════════════════════════════════════╗
+    ║        Tailscale API v2            ║
+    ╚════════════════════════════════════╝
 ```
 
 ### 1.3 Lifecycle & Storage Contract
 Transparency on where data lives, how it persists, and its security policy.
 
-| Data Type | Path (Host) | Mode: Docker | Mode: Local | Permission |
-|-----------|-------------|--------------|-------------|------------|
-| **Data Dir** | `~/.config/ts-proxy/` | Volume Mount | Local Dir | `700` |
-| **Secrets** | `.../secrets.json` | Persisted | Persisted | `600` |
-| **Config** | `.../config.yaml` | Persisted | Persisted | `600` |
-| **Logs** | `.../proxy.log` | Persisted | Persisted | `600` |
-| **Autosave** | `/tmp/ts_proxy/` | Host Mount | Local Dir | `700` |
+| Data Type | Path (Host) | Permission |
+|-----------|-------------|------------|
+| **Data Dir** | `~/.config/ts-proxy/` | `700` |
+| **Secrets** | `.../secrets.json` | `600` |
+| **Config** | `.../config.yaml` | `600` |
+| **Logs** | `.../proxy.log` | `600` |
+| **Autosave** | `/tmp/ts_proxy/` | `700` |
 
 ### 1.4 The Help Engine (Two-Tier Documentation)
 `ts-proxy` utilizes a dynamic introspection engine to provide two levels of assistance:
@@ -169,9 +140,7 @@ All business operations in the `do` namespace REQUIRE a payload. The CLI is "int
 To ensure sovereignty, `ts-proxy` enforces a strict 0-trust file policy.
 
 #### A. Creation Patterns
-*   **Mode: Dev/Local (`uv`)**: Lazy creation. Directories and files are created ONLY when first needed (e.g., `admin login`), but always with strict permissions.
-*   **Mode: Prod/Docker**: Proactive creation. The shim ensures `~/.config/ts-proxy` and `/tmp/ts_proxy` exist and are secured BEFORE launching the container.
-*   **Mode: Release (`install.sh`)**: Direct creation. The installer locks the infrastructure during the setup phase.
+*   **Mode: Local (`uv`, the only mode)**: Lazy creation. Directories and files are created ONLY when first needed (e.g., `admin login`), but always with strict permissions.
 
 #### B. Permission Guard (Enforced at Runtime)
 The `ts_proxy.config.ensure_secure_infra()` function is called on every execution to verify and fix:
@@ -197,12 +166,10 @@ This facet defines the absolute engineering standards for the project.
 ```text
 ts-proxy/
 ├── .git/hooks/pre-commit  # Mandatory Gate: executes 'make uv-check'
-├── .gitlab-ci.yml         # CI/CD: Test, Deploy to Homelab, Sync to GitHub.
-├── scripts/               # Host-side logic and installers
-│   ├── ts_proxy_shim.py   # Python Shim: Orchestrates Docker and HITL.
-│   ├── install.sh         # Universal Installer: curl | bash support.
-│   └── uninstall.sh       # Universal Uninstaller: Total purge.
-├── src/ts_proxy/          # Internal Appliance Core
+├── scripts/               # Host-side logic
+│   ├── audit_infra.py     # Infrastructure audit (permissions, umask).
+│   └── ts_proxy_remote.sh # SSH remote wrapper (tunnel + forward).
+├── src/ts_proxy/          # Internal Core
 │   ├── api.py             # Tailscale Client: Business logic, alphabetical.
 │   ├── cli.py             # Typer Entrypoint: Routings and Documentation injection.
 │   ├── models.py          # Pydantic V2: Payload validation (extra="forbid").
@@ -216,8 +183,6 @@ ts-proxy/
 │   ├── conftest.py        # Automated HITL mocking for test suite.
 │   ├── test_api.py        # Client unit tests.
 │   └── test_cli.py        # Interface regression tests.
-├── Dockerfile             # Multi-stage build (Security-first).
-├── docker-compose.yml     # Local dev orchestration.
 ├── pyproject.toml         # Manifest: dependencies, scripts, and version.
 ├── Makefile               # Universal Command Plane.
 ├── CONTRACT.md            # THIS DOCUMENT: 100% Source of Truth.
@@ -244,18 +209,13 @@ make uv-unlink
 | `make uv-link` | Editable dev install. | Dev |
 | `make uv-unlink` | Remove dev link. | Dev |
 | `make uv-uninstall`| Full removal of local tools and links. | Cleanup |
-| `make docker-install`| Sovereign Appliance installation (Shim + Image). | Prod |
-| `make docker-uninstall`| Sovereign Appliance removal. | Cleanup |
 | `make uv-build` | Build Python packages (clears `dist/`). | Dist |
 | `make uv-publish` | Publish to PyPI (requires `UV_PUBLISH_TOKEN`). | Dist |
-| `make docker-publish`| Push image to Registry (Docker Hub / GitLab). | Dist |
-| `make git-release` | **Full Cycle**: Check, Tag, Push, Publish (All). | Lifecycle |
+| `make git-release` | **Full Cycle**: Check, Tag, Push, Publish (Python). | Lifecycle |
 
 ### 2.4 Distribution & Credentials
 For production distribution, the following environment variables are required:
-- `UV_PUBLISH_TOKEN`: Required for `make uv-publish`.
-- `GITHUB_TOKEN`: Required for CI/CD GitHub synchronization.
-- `DOCKER_LOGIN`: Ensure `docker login` is performed before `make docker-publish`.
+- `UV_PUBLISH_TOKEN`: Required for `make uv-publish` (via `with-env`, never exported).
 
 ### 2.5 Immutable Edition Rules
 

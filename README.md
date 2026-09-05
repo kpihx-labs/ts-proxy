@@ -10,7 +10,7 @@
 > Serverless Sovereign MCP Proxy for Tailscale Network Management (v1.2.2)
 > **0% Hardcode · 100% Flexibility · Strict Alphabetical Order**
 
-Part of the **KpihX-Labs** architecture, `ts-proxy` is a secure, ephemeral CLI tool that runs inside the `docker-host` abstraction layer. It acts as an intelligent intermediary between your AI agents (running on Ubuntu/Mac) and the global Tailscale API.
+Part of the **KpihX-Labs** architecture, `ts-proxy` is a secure CLI tool installed via `uv tool install ts-proxy` (PyPI) — the same single distribution path as every other `*-proxy`. It acts as an intelligent intermediary between your AI agents and the global Tailscale API.
 
 ## Core Principles
 
@@ -28,7 +28,7 @@ Part of the **KpihX-Labs** architecture, `ts-proxy` is a secure, ephemeral CLI t
 
 ## Quick Start Visual
 ```text
-   AI Agent ──▶ ts-proxy ──▶ [Docker: Core] ──▶ Tailscale API
+   AI Agent ──▶ ts-proxy ──▶ [uv tool install] ──▶ Tailscale API
                 │             │
                 │             └─▶ [HITL Approval Web UI]
                 └─▶ [Autosave: /tmp/ts-proxy/]
@@ -74,4 +74,4 @@ ts-proxy admin status
 - **Validation**: Pydantic V2 (Strict Payload Firewall)
 - **Engine**: Httpx (Async), Typer (CLI Interface)
 - **UI**: Glassmorphism Web HITL (Approved by KpihX)
-- **Runtime**: Ephemeral Docker Container (`ts-proxy:latest`)
+- **Runtime**: Local `uv` tool (`uv tool install ts-proxy`)

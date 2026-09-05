@@ -247,7 +247,7 @@ console = Console()
 
 def get_client() -> TailscaleClient:
     try:
-        # Resolves via env, explicitly, persisted session, or the docker mount
+        # Resolves via env, explicitly, or persisted session
         auth = AuthManager()
         if not auth.client_id or not auth.client_secret:
             raise SecureProxyError(
@@ -377,20 +377,6 @@ def admin_auth_check():
         )
     except SecureProxyError as e:
         handle_error(e)
-
-
-@app_admin.command("upgrade")
-def admin_upgrade():
-    """Pulls the latest appliance image and updates the host-side shim."""
-    console.print("[bold cyan]🚀 Sovereign Upgrade Signal Sent[/bold cyan]")
-    # The shim intercepts this token to perform the host-side docker pull
-    print("UPGRADE_REQUIRED: 1")
-    output_result(
-        {
-            "status": "ok",
-            "message": "Upgrade signal sent to host. The host-side shim will now pull the latest image.",
-        }
-    )
 
 
 # --- Admin Config Namespace ---

@@ -83,7 +83,6 @@ def _resolve_data_dir() -> Path:
 DEFAULT_DATA_DIR = _resolve_data_dir()
 PERSISTED_SECRETS_PATH = DEFAULT_DATA_DIR / "secrets.json"
 LOG_PATH = DEFAULT_DATA_DIR / "proxy.log"
-PROD_SECRET_MOUNT = Path("/var/run/secrets/ts-auth.json")
 
 # Execute hardening immediately on module load
 ensure_secure_infra()

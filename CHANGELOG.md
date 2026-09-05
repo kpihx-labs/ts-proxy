@@ -1,5 +1,9 @@
 # CHANGELOG — ts-proxy
 
+## [Unreleased]
+### Removed
+- **Docker deployment purged totally** (KπX decision 2026-09-05): `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.gitlab-ci.yml`, `scripts/install.sh`, `scripts/uninstall.sh`, `scripts/ts_proxy_shim.py` deleted; `docker-*` Makefile targets, `docker-publish`, and the `admin upgrade` command removed; `PROD_SECRET_MOUNT` fallback dropped. Single distribution path = PyPI via `uv tool install ts-proxy`, like every other `*-proxy`.
+
 ## [1.2.0] - 2026-08-15
 ### Changed
 - **Config dir migrated to XDG convention**: default data/config directory moved from `~/.ts_proxy` to `~/.config/ts-proxy/`. `TS_PROXY_DATA` and `TS_PROXY_CONFIG_PATH` still override the default.

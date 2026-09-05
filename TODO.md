@@ -21,6 +21,5 @@
   - [ ] Use Fernet (AES-128) for `secrets.json` at rest.
 - [ ] **Rate Limiting**: Implement protection for the HITL server to prevent brute-force approval attempts.
 
-## 📦 Distribution
-- [x] **CI/CD Automation**: `.gitlab-ci.yml` for automated Docker builds and pushes.
-- [x] **Universal Installer**: `install.sh` and `uninstall.sh` for one-click setup.
+## 📦 Distribution (uv-only, KπX 2026-09-05)
+- [x] **Docker/CI purged**: `Dockerfile`, `docker-compose.yml`, appliance scripts (`install.sh`, `uninstall.sh`, `ts_proxy_shim.py`), `.gitlab-ci.yml` deleted — `uv tool install ts-proxy` (PyPI) is the single distribution path, like every other `*-proxy`.

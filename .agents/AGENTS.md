@@ -10,7 +10,7 @@
 | Field | Value |
 |-------|-------|
 | Purpose | Sovereign Tailscale Proxy (Serverless Infrastructure) |
-| Stack | Python (uv), Typer, httpx, Docker, Python Shim |
+| Stack | Python (uv), Typer, httpx |
 | Status | 🟢 Production Ready — Hardened, Sorted, and Documented |
 
 ## Mandatory Quality Gate
@@ -21,5 +21,5 @@
 ## Evolution Rules
 
 - **Contract First**: Any change to CLI surface or architecture must be reflected in `CONTRACT.md` before implementation.
-- **Docker First**: All production interactions must be tested via the Docker shim to ensure agnosticism.
+- **UV First**: `uv tool install ts-proxy` (PyPI) is the single production install path — same as every other `*-proxy`. No Docker, no CI.
 - **No Secret Leakage**: Audit outputs must be checked to ensure no OAuth credentials or API keys are ever printed to stdout/stderr.

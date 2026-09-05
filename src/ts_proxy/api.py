@@ -38,7 +38,7 @@ from .models import (
 
 import logging
 from .exceptions import SecureProxyError
-from .config import PERSISTED_SECRETS_PATH, PROD_SECRET_MOUNT
+from .config import PERSISTED_SECRETS_PATH
 from .hitl import require_approval
 
 logger = logging.getLogger("ts_proxy")
@@ -72,12 +72,7 @@ class AuthManager:
             self.tailnet = os.environ.get("TS_TAILNET", "-")
             return
 
-        # 4. Docker Secret Mount (Production)
-        if os.path.exists(PROD_SECRET_MOUNT):
-            self._load_from_json(PROD_SECRET_MOUNT)
-            return
-
-        # 5. Fallback
+        # 4. Fallback
         pass
 
     def _load_from_json(self, path: str):
