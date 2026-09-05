@@ -1,7 +1,7 @@
 services:
   ts-proxy:
     build: .
-    image: kpihx/ts-proxy:latest
+    image: registry.gitlab.com/kpihx-labs/proxies/ts-proxy:latest
     volumes:
       - .:/app
       - ~/.ts-proxy:/root/.ts-proxy

@@ -3,7 +3,7 @@ stages:
   - deploy
 
 variables:
-  DOCKER_IMAGE: "kpihx/ts-proxy:latest"
+  DOCKER_IMAGE: "registry.gitlab.com/kpihx-labs/proxies/ts-proxy:latest"
 
 run_tests:
   stage: test
@@ -23,3 +23,7 @@ deploy_appliance:
     # Build and Install locally on the runner host
     - make docker-install
     - echo "✅ Appliance deployed and shim linked."
+    # Publish the appliance image (push needs write auth → CI_JOB_TOKEN, no local secret)
+    - docker login registry.gitlab.com -u "$CI_REGISTRY_USER" -p "$CI_JOB_TOKEN"
+    - make docker-publish
+    - echo "✅ Appliance image published to $DOCKER_IMAGE."

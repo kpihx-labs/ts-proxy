@@ -5,9 +5,11 @@ PKG_DIR      := src/$(PKG_DIR_NAME)
 VERSION      := $(shell grep -m 1 version pyproject.toml | tr -s ' ' | tr -d '"' | tr -d "'" | cut -d' ' -f3)
 
 # --- Registry Configuration ---
-# Set REGISTRY to "ghcr.io/kpihx/" or "registry.gitlab.com/kpihx-labs/" as needed
-REGISTRY     ?= 
-DOCKER_IMAGE := $(REGISTRY)kpihx/$(PKG_NAME):latest
+# Default: GitLab Container Registry under kpihx-labs/proxies (Option B, KπX 2026-09-05).
+# Project is public → `docker pull` needs no login; push needs registry write auth.
+# Override per-invocation, e.g.: make docker-build REGISTRY=ghcr.io/kpihx-labs/proxies/
+REGISTRY     ?= registry.gitlab.com/kpihx-labs/proxies/
+DOCKER_IMAGE := $(REGISTRY)$(PKG_NAME):latest
 
 # --- System Paths ---
 REAL_USER := $(if $(SUDO_USER),$(SUDO_USER),$(USER))

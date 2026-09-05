@@ -5,8 +5,8 @@ set -e
 # Part of KpihX-Labs Sovereign Infrastructure
 
 # --- Configuration ---
-GITHUB_RAW_URL="https://raw.githubusercontent.com/KpihX/ts-proxy/main"
-DOCKER_IMAGE="kpihx/ts-proxy:latest"
+GITHUB_RAW_URL="https://raw.githubusercontent.com/kpihx-labs/ts-proxy/main"
+DOCKER_IMAGE="registry.gitlab.com/kpihx-labs/proxies/ts-proxy:latest"
 
 # --- Colors & Branding ---
 CYAN='\033[0;36m'

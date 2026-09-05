@@ -30,9 +30,9 @@ fi
 
 echo -e "🐳 Cleaning Docker resources..."
 # Stop and remove any running containers for this image
-docker ps -q --filter "ancestor=kpihx/ts-proxy:latest" | xargs -r docker rm -f &>/dev/null || true
+docker ps -q --filter "ancestor=registry.gitlab.com/kpihx-labs/proxies/ts-proxy:latest" | xargs -r docker rm -f &>/dev/null || true
 # Remove the image
-docker rmi kpihx/ts-proxy:latest 2>/dev/null || true
+docker rmi registry.gitlab.com/kpihx-labs/proxies/ts-proxy:latest 2>/dev/null || true
 
 echo -e "🧹 Purging data and temporary files..."
 rm -rf "${TMP_DIR}"

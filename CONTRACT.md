@@ -17,10 +17,10 @@ For quick deployment without full repository management.
 *   **Sovereign Appliance (Docker Script)**:
     ```bash
     # Install (requires docker + python3)
-    curl -sSL https://raw.githubusercontent.com/KpihX/ts-proxy/main/scripts/install.sh | bash
+    curl -sSL https://raw.githubusercontent.com/kpihx-labs/ts-proxy/main/scripts/install.sh | bash
     
     # Uninstall (Total Purge)
-    curl -sSL https://raw.githubusercontent.com/KpihX/ts-proxy/main/scripts/uninstall.sh | bash
+    curl -sSL https://raw.githubusercontent.com/kpihx-labs/ts-proxy/main/scripts/uninstall.sh | bash
     ```
 
 *   **Python Package (Isolated Environment)**:

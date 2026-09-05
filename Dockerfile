@@ -11,8 +11,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.6 /uv /uvx /bin/
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files first
-COPY pyproject.toml uv.lock ./
+# Copy dependency files first (README.md required: pyproject `readme = "README.md"` + uv_build backend)
+COPY pyproject.toml uv.lock README.md ./
 
 # Install dependencies using uv into the system python
 RUN uv pip install --system --no-cache -r pyproject.toml
