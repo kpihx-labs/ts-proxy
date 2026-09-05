@@ -1,6 +1,6 @@
 # CHANGELOG — ts-proxy
 
-## [Unreleased]
+## [1.2.2] - 2026-09-05
 ### Removed
 - **Docker deployment purged totally** (KπX decision 2026-09-05): `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.gitlab-ci.yml`, `scripts/install.sh`, `scripts/uninstall.sh`, `scripts/ts_proxy_shim.py` deleted; `docker-*` Makefile targets, `docker-publish`, and the `admin upgrade` command removed; `PROD_SECRET_MOUNT` fallback dropped. Single distribution path = PyPI via `uv tool install ts-proxy`, like every other `*-proxy`.
 
