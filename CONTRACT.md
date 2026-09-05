@@ -39,7 +39,7 @@ For quick deployment without full repository management.
 #### B. Source Flow (Git Clone)
 For local installation from a cloned repository.
 ```bash
-git clone https://github.com/KpihX/ts-proxy.git
+git clone https://github.com/kpihx-labs/ts-proxy.git
 cd ts-proxy
 
 # Install Host Appliance
